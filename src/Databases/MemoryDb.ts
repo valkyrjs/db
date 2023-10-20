@@ -3,11 +3,18 @@ import { Document } from "../Types.js";
 import { MemoryStorage } from "./MemoryDb.Storage.js";
 import { Registrars } from "./Registrars.js";
 
+type Options = {
+  name: string;
+  registrars: Registrars[];
+};
+
 export class MemoryDatabase<T extends Record<string, Document>> {
+  readonly name: string;
   readonly #collections = new Map<keyof T, Collection<T[keyof T]>>();
 
-  register(registrars: Registrars[]): void {
-    for (const { name } of registrars) {
+  constructor(readonly options: Options) {
+    this.name = options.name;
+    for (const { name } of options.registrars) {
       this.#collections.set(name, new Collection(name, new MemoryStorage(name)));
     }
   }

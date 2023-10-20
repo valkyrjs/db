@@ -18,7 +18,10 @@ export abstract class Storage<TSchema extends Document = Document> {
 
   readonly #channel: BroadcastChannel;
 
-  constructor(readonly name: string, readonly id = nanoid()) {
+  constructor(
+    readonly name: string,
+    readonly id = nanoid()
+  ) {
     this.#channel = new BroadcastChannel(`valkyr:db:${name}`);
     this.#channel.onmessage = ({ data }: MessageEvent<StorageBroadcast<TSchema>>) => {
       if (data.name !== this.name) {
@@ -124,7 +127,10 @@ export abstract class Storage<TSchema extends Document = Document> {
  |--------------------------------------------------------------------------------
  */
 
-export function addOptions(cursor: Cursor, options: Options): Cursor {
+export function addOptions<TSchema extends Document = Document>(
+  cursor: Cursor<TSchema>,
+  options: Options
+): Cursor<TSchema> {
   if (options.sort) {
     cursor.sort(options.sort);
   }

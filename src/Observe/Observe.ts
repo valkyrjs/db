@@ -69,7 +69,7 @@ function applyQueryOptions<TSchema extends Document = Document>(
   options?: Options
 ): WithId<TSchema>[] {
   if (options !== undefined) {
-    return addOptions(new Query({}).find(documents), options).all() as WithId<TSchema>[];
+    return addOptions(new Query({}).find<TSchema>(documents), options).all() as WithId<TSchema>[];
   }
   return documents;
 }

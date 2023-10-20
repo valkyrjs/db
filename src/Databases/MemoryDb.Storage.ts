@@ -55,7 +55,7 @@ export class MemoryStorage<TSchema extends Document = Document> extends Storage<
   }
 
   async find(filter?: Filter<WithId<TSchema>>, options?: Options): Promise<WithId<TSchema>[]> {
-    let cursor = new Query(filter ?? {}).find(Array.from(this.#documents.values()));
+    let cursor = new Query(filter ?? {}).find<TSchema>(Array.from(this.#documents.values()));
     if (options !== undefined) {
       cursor = addOptions(cursor, options);
     }

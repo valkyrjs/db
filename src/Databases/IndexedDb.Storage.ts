@@ -30,7 +30,11 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
 
   #db?: IDBPDatabase;
 
-  constructor(name: string, promise: Promise<IDBPDatabase>, readonly log: DBLogger) {
+  constructor(
+    name: string,
+    promise: Promise<IDBPDatabase>,
+    readonly log: DBLogger
+  ) {
     super(name);
     this.#promise = promise;
   }
@@ -124,7 +128,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
     }
 
     const indexes = this.#resolveIndexes(filter);
-    let cursor = new Query(filter).find(await this.#getAll({ ...options, ...indexes }));
+    let cursor = new Query(filter).find<TSchema>(await this.#getAll({ ...options, ...indexes }));
     if (options !== undefined) {
       cursor = addOptions(cursor, options);
     }
