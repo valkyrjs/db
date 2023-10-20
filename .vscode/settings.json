@@ -1,0 +1,53 @@
+{
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "material-icon-theme.folders.associations": {
+    "cerberus": "secure",
+    "jsonrpc": "public"
+  },
+  "material-icon-theme.files.associations": {
+    "index.ts": "tree",
+    "main.ts": "tree",
+    "mod.ts": "tree",
+    "config.ts": "settings",
+    "*.access.ts": "key",
+    "*.database.ts": "database",
+    "*.collection.ts": "mxml",
+    "*.controller.ts": "makefile",
+    "*.events.ts": "lib",
+    "*.method.ts": "makefile",
+    "*.methods.ts": "makefile",
+    "*.mock.ts": "hardhat",
+    "*.entity.ts": "database",
+    "*.form.ts": "log",
+    "*.gateway.ts": "parcel",
+    "*.module.ts": "robot",
+    "*.projector.ts": "apiblueprint",
+    "*.role.ts": "playwright",
+    "*.service.ts": "console",
+    "*.validator.ts": "key",
+    "*.component.tsx": "virtual",
+    "*.modal.tsx": "opam",
+    "*.view.tsx": "virtual",
+  },
+  "files.exclude": {
+    "**/.turbo": true,
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}

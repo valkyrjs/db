@@ -1,0 +1,24 @@
+version: "2"
+
+plugins:
+  eslint:
+    enabled: true
+    config: configs/eslint/index.js
+
+checks:
+  similar-code:
+    enabled: true
+    config:
+      threshold: 75
+  return-statements:
+    config:
+      threshold: 8
+
+exclude_patterns:
+  - "dist/"
+  - "scripts/"
+  - "**/node_modules/"
+  - "**/tests/"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.d.ts"
