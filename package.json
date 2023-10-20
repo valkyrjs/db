@@ -1,6 +1,6 @@
 {
   "name": "@valkyr/db",
-  "version": "1.0.0-rc1",
+  "version": "0.0.0",
   "description": "Simple client side storage solution written in TypeScript.",
   "repository": "https://github.com/cmdo/valkyr.git",
   "bugs": "https://github.com/cmdo/valkyr/issues",
