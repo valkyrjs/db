@@ -1,7 +1,13 @@
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/1998130/229430454-ca0f2811-d874-4314-b13d-c558de8eec7e.svg" />
+</p>
+
 # Valkyr Database
 
-`@valkyr/db` provides a mongo like persistent storage solution for browsers which comes with multiple storage adapter solutions. It's meant to provide an agnostic data layer which can be used for any popular web based framework such as `react`, `vue`, `svelte`, `angular`, and any other framework.
+Attempts to provide a practical data storage solution that utilizes MongoDB syntax for client-side read and write operations. Designed to be framework-agnostic, it can be easily integrated with any framework or even used without one.
 
-It's a write side storage solution written to compliment [mingo](https://github.com/kofrasa/mingo) used for the read side.
+The database was developed to overcome limitations in storing substantial amounts of data on the client side, which is not feasible with traditional storage solutions like localStorage. Instead, Valkyr Database relies on configurable database adapters such as in memory and indexeddb for browsers and async storage for hybrid mobile solutions, offering a larger storage capacity.
 
-This solution is specifically written for client side storage, and is not optimized for performance. The main focus of `@valkyr/db` is to provide a simple but powerful data toolkit for quality of life.
+Additionally, the solution is tailored to provide native observability and effective management functionality, removing the reliance on client side state management utilities.
+
+Go to the [docs](https://valkyrjs.com/db-introduction) for more information.
