@@ -16,12 +16,16 @@ import { UpdateResult } from "../../storage/operators/update.ts";
 import { addOptions, Options, Storage } from "../../storage/storage.ts";
 import type { Document, Filter, WithId } from "../../types.ts";
 import { IndexedDbCache } from "./cache.ts";
+import { Pending } from "./pending.ts";
 
 const update = createUpdater({ cloneMode: "deep" });
 
 export class IndexedDbStorage<TSchema extends Document = Document> extends Storage<TSchema> {
   readonly #cache = new IndexedDbCache<TSchema>();
   readonly #documents = new Map<string, WithId<TSchema>>();
+
+  readonly #pending: Pending<TSchema>;
+
   readonly #promise: Promise<IDBPDatabase>;
 
   #db?: IDBPDatabase;
@@ -33,6 +37,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
   ) {
     super(name);
     this.#promise = promise;
+    this.#pending = new Pending(this);
   }
 
   async resolve() {
@@ -70,7 +75,9 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
     if (await this.has(document.id)) {
       throw new DuplicateDocumentError(document, this as any);
     }
+
     this.#documents.set(document.id, document);
+    this.#pending.upsert(document);
 
     this.broadcast("insertOne", document);
     this.#cache.flush();
@@ -88,6 +95,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
       const document = { ...data, id: data.id ?? crypto.randomUUID() } as WithId<TSchema>;
       result.push(document);
       this.#documents.set(document.id, document);
+      this.#pending.upsert(document);
     }
 
     this.broadcast("insertMany", result);
@@ -144,6 +152,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
         const modified = update(document, expr, arrayFilters, condition, options);
         if (modified.length > 0) {
           this.#documents.set(document.id, document);
+          this.#pending.upsert(document);
           this.broadcast("updateOne", document);
           return new UpdateResult(1, 1);
         }
@@ -176,6 +185,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
           modifiedCount += 1;
           documents.push(document);
           this.#documents.set(document.id, document);
+          this.#pending.upsert(document);
         }
       }
     }
@@ -204,6 +214,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
         modifiedCount += 1;
         documents.push(document);
         this.#documents.set(document.id, document);
+        this.#pending.upsert(document);
       }
     }
 
@@ -229,6 +240,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
     for (const document of documents) {
       if (query.test(document) === true) {
         this.#documents.delete(document.id);
+        this.#pending.remove(document.id);
         this.broadcast("remove", document);
         count += 1;
       }
@@ -266,23 +278,6 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
    */
 
   async save(): Promise<void> {
-    // this.db.
+    this.#pending.save();
   }
 }
-
-/*
-const logger = new InsertLog(this.name);
-
-    const document = { ...data, id: data.id ?? crypto.randomUUID() } as any;
-    if (await this.has(document.id)) {
-      throw new DuplicateDocumentError(document, this as any);
-    }
-    await this.db.transaction(this.name, "readwrite", { durability: "relaxed" }).store.add(document);
-
-    this.broadcast("insertOne", document);
-    this.#cache.flush();
-
-    this.log(logger.result());
-
-    return getInsertOneResult(document);
-*/
