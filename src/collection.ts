@@ -1,6 +1,6 @@
 import { UpdateOptions } from "mingo/core";
 import { UpdateExpression } from "mingo/updater";
-import { Observable, Subscription } from "rxjs";
+import { Observable, Subject, Subscription } from "rxjs";
 
 import { observe, observeOne } from "./observe/mod.ts";
 import {
@@ -26,7 +26,10 @@ export class Collection<TSchema extends Document = Document> {
     readonly storage: Storage<TSchema>,
   ) {}
 
-  get observable() {
+  get observable(): {
+    change: Subject<ChangeEvent<TSchema>>;
+    flush: Subject<void>;
+  } {
     return this.storage.observable;
   }
 

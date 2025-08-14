@@ -1,5 +1,5 @@
 class Performance {
-  startedAt = performance.now();
+  startedAt: number = performance.now();
   endedAt?: number;
   duration?: number;
 
@@ -10,7 +10,7 @@ class Performance {
 }
 
 abstract class LogEvent {
-  readonly performance = new Performance();
+  readonly performance: Performance = new Performance();
 
   data?: Record<string, any>;
 

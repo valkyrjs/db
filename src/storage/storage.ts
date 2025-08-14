@@ -10,7 +10,10 @@ import { RemoveResult } from "./operators/remove.ts";
 import { UpdateResult } from "./operators/update.ts";
 
 export abstract class Storage<TSchema extends Document = Document> {
-  readonly observable = {
+  readonly observable: {
+    change: Subject<ChangeEvent<TSchema>>;
+    flush: Subject<void>;
+  } = {
     change: new Subject<ChangeEvent<TSchema>>(),
     flush: new Subject<void>(),
   };
@@ -21,7 +24,7 @@ export abstract class Storage<TSchema extends Document = Document> {
 
   constructor(
     readonly name: string,
-    readonly id = crypto.randomUUID(),
+    readonly id: string = crypto.randomUUID(),
   ) {
     this.#channel = new BroadcastChannel(`valkyr:db:${name}`);
     this.#channel.onmessage = ({ data }: MessageEvent<StorageBroadcast<TSchema>>) => {
