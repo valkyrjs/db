@@ -1,0 +1,19 @@
+{
+  "name": "@valkyr/db",
+  "version": "2.0.0-beta.1",
+  "exports": {
+    ".": "./src/mod.ts"
+  },
+  "publish": {
+    "exclude": [".github", ".vscode", ".gitignore", "tests"]
+  },
+  "tasks": {
+    "check": "deno check ./src/mod.ts",
+    "lint": "npx eslint -c eslint.config.mjs --fix .",
+    "fmt": "npx prettier --write .",
+    "test": "deno test --allow-all",
+    "test:publish": "deno publish --dry-run",
+    "ncu": "npx ncu -u -p npm"
+  },
+  "nodeModulesDir": "auto"
+}
