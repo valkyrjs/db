@@ -2,14 +2,14 @@ import { Document } from "../../types.ts";
 import { IndexedDbStorage } from "./storage.ts";
 
 export class Pending<TSchema extends Document = Document> {
-  readonly #upsert: any[] = [];
-  readonly #remove: string[] = [];
-
-  readonly #chunkSize = 500;
-
-  #saving: Promise<void> | null = null;
-
   #storage: IndexedDbStorage<TSchema>;
+
+  readonly #upsert = new Map<string, TSchema>();
+  readonly #remove = new Set<string>();
+
+  #chunkSize = 500;
+  #saveScheduled = false;
+  #saving: Promise<void> | null = null;
 
   constructor(storage: IndexedDbStorage<TSchema>) {
     this.#storage = storage;
@@ -20,33 +20,48 @@ export class Pending<TSchema extends Document = Document> {
   }
 
   upsert(document: any): void {
-    this.#upsert.push(document);
-    this.save();
+    this.#remove.delete(document.id);
+    this.#upsert.set(document.id, document);
+    this.#schedule();
   }
 
   remove(id: any): void {
-    this.#remove.push(id);
-    this.save();
+    this.#upsert.delete(id);
+    this.#remove.add(id);
+    this.#schedule();
+  }
+
+  #schedule() {
+    if (!this.#saveScheduled) {
+      this.#saveScheduled = true;
+      queueMicrotask(() => {
+        this.#saveScheduled = false;
+        void this.save();
+      });
+    }
   }
 
   async save() {
-    if (this.#saving) {
-      return;
-    }
+    if (this.#saving) return;
 
     this.#saving = (async () => {
       try {
-        while (this.#upsert.length > 0 || this.#remove.length > 0) {
+        while (this.#upsert.size > 0 || this.#remove.size > 0) {
           const tx = this.#storage.db.transaction(this.#storage.name, "readwrite", { durability: "relaxed" });
+          const store = tx.store;
 
-          if (this.#remove.length > 0) {
-            const removals = this.#remove.splice(0, this.#chunkSize);
-            await Promise.all(removals.map((id) => tx.store.delete(id)));
+          // Process removals
+          if (this.#remove.size > 0) {
+            const removals = Array.from(this.#remove).slice(0, this.#chunkSize);
+            removals.forEach((id) => this.#remove.delete(id));
+            await Promise.all(removals.map((id) => store.delete(id)));
           }
 
-          if (this.#upsert.length > 0) {
-            const upserts = this.#upsert.splice(0, this.#chunkSize);
-            await Promise.all(upserts.map((doc) => tx.store.put(doc)));
+          // Process upserts
+          if (this.#upsert.size > 0) {
+            const upserts = Array.from(this.#upsert.values()).slice(0, this.#chunkSize);
+            upserts.forEach((doc) => this.#upsert.delete(doc.id));
+            await Promise.all(upserts.map((doc) => store.put(doc)));
           }
 
           await tx.done;
