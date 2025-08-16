@@ -1,6 +1,6 @@
 {
   "name": "@valkyr/db",
-  "version": "2.0.0-beta.2",
+  "version": "2.0.0-beta.3",
   "exports": {
     ".": "./src/mod.ts"
   },
@@ -14,6 +14,9 @@
     "test": "deno test --allow-all",
     "test:publish": "deno publish --dry-run",
     "ncu": "npx ncu -u -p npm"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "dom"]
   },
   "nodeModulesDir": "auto"
 }

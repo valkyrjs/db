@@ -6,19 +6,8 @@ import { Document } from "../../types.ts";
 import { Registrars } from "../registrars.ts";
 import { IndexedDbStorage } from "./storage.ts";
 
-function log() {}
-
-type StringRecord<T> = { [x: string]: T };
-
-type Options = {
-  name: string;
-  version?: number;
-  registrars: Registrars[];
-  log?: DBLogger;
-};
-
-export class IndexedDatabase<T extends StringRecord<Document>> {
-  readonly #collections = new Map<keyof T, Collection<T[keyof T]>>();
+export class IndexedDatabase<TCollections extends StringRecord<Document>> {
+  readonly #collections = new Map<keyof TCollections, Collection<TCollections[keyof TCollections]>>();
   readonly #db: Promise<IDBPDatabase<unknown>>;
 
   constructor(readonly options: Options) {
@@ -44,7 +33,9 @@ export class IndexedDatabase<T extends StringRecord<Document>> {
    |--------------------------------------------------------------------------------
    */
 
-  collection<TSchema extends T[Name], Name extends keyof T = keyof T>(name: Name): Collection<TSchema> {
+  collection<TSchema extends TCollections[Name], Name extends keyof TCollections = keyof TCollections>(
+    name: Name,
+  ): Collection<TSchema> {
     const collection = this.#collections.get(name);
     if (collection === undefined) {
       throw new Error(`Collection '${name as string}' not found`);
@@ -72,3 +63,14 @@ export class IndexedDatabase<T extends StringRecord<Document>> {
     this.#db.then((db) => db.close());
   }
 }
+
+function log() {}
+
+type StringRecord<TCollections> = { [x: string]: TCollections };
+
+type Options = {
+  name: string;
+  version?: number;
+  registrars: Registrars[];
+  log?: DBLogger;
+};

@@ -9,5 +9,3 @@ Attempts to provide a practical data storage solution that utilizes MongoDB synt
 The database was developed to overcome limitations in storing substantial amounts of data on the client side, which is not feasible with traditional storage solutions like localStorage. Instead, Valkyr Database relies on configurable database adapters such as in memory and indexeddb for browsers and async storage for hybrid mobile solutions, offering a larger storage capacity.
 
 Additionally, the solution is tailored to provide native observability and effective management functionality, removing the reliance on client side state management utilities.
-
-Go to the [docs](https://valkyrjs.com/db-introduction) for more information.

@@ -69,17 +69,14 @@ export class MemoryStorage<TSchema extends Document = Document> extends Storage<
     condition?: Filter<WithId<TSchema>>,
     options?: UpdateOptions,
   ): Promise<UpdateResult> {
-    const query = new Query(filter);
-    for (const document of Array.from(this.#documents.values())) {
-      if (query.test(document) === true) {
-        const modified = update(document, expr, arrayFilters, condition, options);
-        if (modified.length > 0) {
-          this.#documents.set(document.id, document);
-          this.broadcast("updateOne", document);
-          return new UpdateResult(1, 1);
-        }
-        return new UpdateResult(1, 0);
+    for (const document of await this.find(filter)) {
+      const modified = update(document, expr, arrayFilters, condition, options);
+      if (modified.length > 0) {
+        this.#documents.set(document.id, document);
+        this.broadcast("updateOne", document);
+        return new UpdateResult(1, 1);
       }
+      return new UpdateResult(1, 0);
     }
     return new UpdateResult(0, 0);
   }
@@ -91,41 +88,15 @@ export class MemoryStorage<TSchema extends Document = Document> extends Storage<
     condition?: Filter<WithId<TSchema>>,
     options?: UpdateOptions,
   ): Promise<UpdateResult> {
-    const query = new Query(filter);
-
     const documents: WithId<TSchema>[] = [];
 
     let matchedCount = 0;
     let modifiedCount = 0;
 
-    for (const document of Array.from(this.#documents.values())) {
-      if (query.test(document) === true) {
-        matchedCount += 1;
-        const modified = update(document, expr, arrayFilters, condition, options);
-        if (modified.length > 0) {
-          modifiedCount += 1;
-          documents.push(document);
-          this.#documents.set(document.id, document);
-        }
-      }
-    }
-
-    this.broadcast("updateMany", documents);
-
-    return new UpdateResult(matchedCount, modifiedCount);
-  }
-
-  async replace(filter: Filter<WithId<TSchema>>, document: WithId<TSchema>): Promise<UpdateResult> {
-    const query = new Query(filter);
-
-    const documents: WithId<TSchema>[] = [];
-
-    let matchedCount = 0;
-    let modifiedCount = 0;
-
-    for (const current of Array.from(this.#documents.values())) {
-      if (query.test(current) === true) {
-        matchedCount += 1;
+    for (const document of await this.find(filter)) {
+      matchedCount += 1;
+      const modified = update(document, expr, arrayFilters, condition, options);
+      if (modified.length > 0) {
         modifiedCount += 1;
         documents.push(document);
         this.#documents.set(document.id, document);
@@ -137,18 +108,31 @@ export class MemoryStorage<TSchema extends Document = Document> extends Storage<
     return new UpdateResult(matchedCount, modifiedCount);
   }
 
-  async remove(filter: Filter<WithId<TSchema>>): Promise<RemoveResult> {
-    const documents = Array.from(this.#documents.values());
-    const query = new Query(filter);
-    let count = 0;
-    for (const document of documents) {
-      if (query.test(document) === true) {
-        this.#documents.delete(document.id);
-        this.broadcast("remove", document);
-        count += 1;
-      }
+  async replace(filter: Filter<WithId<TSchema>>, document: WithId<TSchema>): Promise<UpdateResult> {
+    const documents: WithId<TSchema>[] = [];
+
+    let matchedCount = 0;
+    let modifiedCount = 0;
+
+    for (const current of await this.find(filter)) {
+      matchedCount += 1;
+      modifiedCount += 1;
+      documents.push(document);
+      this.#documents.set(current.id, document);
     }
-    return new RemoveResult(count);
+
+    this.broadcast("updateMany", documents);
+
+    return new UpdateResult(matchedCount, modifiedCount);
+  }
+
+  async remove(filter: Filter<WithId<TSchema>>): Promise<RemoveResult> {
+    const documents = await this.find(filter);
+    for (const document of documents) {
+      this.#documents.delete(document.id);
+    }
+    this.broadcast("remove", documents);
+    return new RemoveResult(documents.length);
   }
 
   async count(filter?: Filter<WithId<TSchema>>): Promise<number> {
