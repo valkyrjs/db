@@ -1,145 +1,155 @@
-import { createUpdater, Query } from "mingo";
-import { UpdateOptions } from "mingo/core";
-import { UpdateExpression } from "mingo/updater";
+import { Query, update } from "mingo";
+import type { AnyObject } from "mingo/types";
 
-import { DuplicateDocumentError } from "../../storage/errors.ts";
+import { getDocumentWithPrimaryKey } from "../../primary-key.ts";
+import { Collections } from "../../storage/collections.ts";
+import type { UpdatePayload } from "../../storage/mod.ts";
+import type { InsertResult } from "../../storage/operators/insert.ts";
+import type { UpdateResult } from "../../storage/operators/update.ts";
 import {
-  getInsertManyResult,
-  getInsertOneResult,
-  type InsertManyResult,
-  type InsertOneResult,
-} from "../../storage/operators/insert.ts";
-import { RemoveResult } from "../../storage/operators/remove.ts";
-import { UpdateResult } from "../../storage/operators/update.ts";
-import { addOptions, Options, Storage } from "../../storage/storage.ts";
-import type { Document, Filter, WithId } from "../../types.ts";
+  addOptions,
+  type CountPayload,
+  type FindByIdPayload,
+  type FindPayload,
+  type InsertManyPayload,
+  type InsertOnePayload,
+  type RemovePayload,
+  type ReplacePayload,
+  Storage,
+} from "../../storage/storage.ts";
+import type { AnyDocument } from "../../types.ts";
 
-const update = createUpdater({ cloneMode: "deep" });
-
-export class MemoryStorage<TSchema extends Document = Document> extends Storage<TSchema> {
-  readonly #documents = new Map<string, WithId<TSchema>>();
+export class MemoryStorage extends Storage {
+  readonly #collections = new Collections();
 
   async resolve() {
     return this;
   }
 
-  async has(id: string): Promise<boolean> {
-    return this.#documents.has(id);
-  }
+  async insertOne({ pkey, values, ...payload }: InsertOnePayload): Promise<InsertResult> {
+    const collection = this.#collections.get(payload.collection);
 
-  async insertOne(data: Partial<TSchema>): Promise<InsertOneResult> {
-    const document = { ...data, id: data.id ?? crypto.randomUUID() } as WithId<TSchema>;
-    if (await this.has(document.id)) {
-      throw new DuplicateDocumentError(document, this as any);
+    const document = getDocumentWithPrimaryKey(pkey, values);
+    if (collection.has(document[pkey])) {
+      return { insertCount: 0, insertIds: [] };
     }
-    this.#documents.set(document.id, document);
+
+    collection.set(document[pkey], document);
     this.broadcast("insertOne", document);
-    return getInsertOneResult(document);
+
+    return { insertCount: 1, insertIds: [document[pkey]] };
   }
 
-  async insertMany(documents: Partial<TSchema>[]): Promise<InsertManyResult> {
-    const result: TSchema[] = [];
-    for (const data of documents) {
-      const document = { ...data, id: data.id ?? crypto.randomUUID() } as WithId<TSchema>;
-      result.push(document);
-      this.#documents.set(document.id, document);
+  async insertMany({ pkey, values, ...payload }: InsertManyPayload): Promise<InsertResult> {
+    const collection = this.#collections.get(payload.collection);
+
+    const documents: AnyDocument[] = [];
+    for (const insert of values) {
+      const document = getDocumentWithPrimaryKey(pkey, insert);
+      if (collection.has(document[pkey])) {
+        continue;
+      }
+      collection.set(document[pkey], document);
+      documents.push(document);
     }
 
-    this.broadcast("insertMany", result);
+    if (documents.length > 0) {
+      this.broadcast("insertMany", documents);
+    }
 
-    return getInsertManyResult(result);
+    return { insertCount: documents.length, insertIds: documents.map((document) => document[pkey]) };
   }
 
-  async findById(id: string): Promise<WithId<TSchema> | undefined> {
-    return this.#documents.get(id);
+  async findById({ collection, id }: FindByIdPayload): Promise<AnyObject | undefined> {
+    return this.#collections.get(collection).get(id);
   }
 
-  async find(filter?: Filter<WithId<TSchema>>, options?: Options): Promise<WithId<TSchema>[]> {
-    let cursor = new Query(filter ?? {}).find<TSchema>(Array.from(this.#documents.values()));
+  async find({ condition = {}, options, ...payload }: FindPayload): Promise<AnyDocument[]> {
+    let cursor = new Query(condition).find<AnyDocument>(this.#collections.documents(payload.collection));
     if (options !== undefined) {
       cursor = addOptions(cursor, options);
     }
-    return cursor.all() as WithId<TSchema>[];
+    return cursor.all();
   }
 
-  async updateOne(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
-  ): Promise<UpdateResult> {
-    for (const document of await this.find(filter)) {
-      const modified = update(document, expr, arrayFilters, condition, options);
-      if (modified.length > 0) {
-        this.#documents.set(document.id, document);
-        this.broadcast("updateOne", document);
-        return new UpdateResult(1, 1);
-      }
-      return new UpdateResult(1, 0);
-    }
-    return new UpdateResult(0, 0);
-  }
-
-  async updateMany(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
-  ): Promise<UpdateResult> {
-    const documents: WithId<TSchema>[] = [];
+  async updateOne({ pkey, condition, modifier, arrayFilters, ...payload }: UpdatePayload): Promise<UpdateResult> {
+    const collection = this.#collections.get(payload.collection);
 
     let matchedCount = 0;
     let modifiedCount = 0;
 
-    for (const document of await this.find(filter)) {
+    for (const document of await this.find({ collection: payload.collection, condition, options: { limit: 1 } })) {
+      const modified = update(document, modifier, arrayFilters, undefined, { cloneMode: "deep" });
+      if (modified.length > 0) {
+        collection.set(document[pkey], document);
+        this.broadcast("updateOne", document);
+        modifiedCount += 1;
+      }
       matchedCount += 1;
-      const modified = update(document, expr, arrayFilters, condition, options);
+    }
+    return { matchedCount, modifiedCount };
+  }
+
+  async updateMany({ pkey, condition, modifier, arrayFilters, ...payload }: UpdatePayload): Promise<UpdateResult> {
+    const collection = this.#collections.get(payload.collection);
+
+    const documents: AnyDocument[] = [];
+
+    let matchedCount = 0;
+    let modifiedCount = 0;
+
+    for (const document of await this.find({ collection: payload.collection, condition })) {
+      matchedCount += 1;
+      const modified = update(document, modifier, arrayFilters, undefined, { cloneMode: "deep" });
       if (modified.length > 0) {
         modifiedCount += 1;
         documents.push(document);
-        this.#documents.set(document.id, document);
+        collection.set(document[pkey], document);
       }
     }
 
     this.broadcast("updateMany", documents);
 
-    return new UpdateResult(matchedCount, modifiedCount);
+    return { matchedCount, modifiedCount };
   }
 
-  async replace(filter: Filter<WithId<TSchema>>, document: WithId<TSchema>): Promise<UpdateResult> {
-    const documents: WithId<TSchema>[] = [];
+  async replace({ pkey, condition, document, ...payload }: ReplacePayload): Promise<UpdateResult> {
+    const collection = this.#collections.get(payload.collection);
 
     let matchedCount = 0;
     let modifiedCount = 0;
 
-    for (const current of await this.find(filter)) {
+    const documents: AnyDocument[] = [];
+    for (const current of await this.find({ collection: payload.collection, condition })) {
       matchedCount += 1;
       modifiedCount += 1;
       documents.push(document);
-      this.#documents.set(current.id, document);
+      collection.set(current[pkey], document);
     }
 
     this.broadcast("updateMany", documents);
 
-    return new UpdateResult(matchedCount, modifiedCount);
+    return { matchedCount, modifiedCount };
   }
 
-  async remove(filter: Filter<WithId<TSchema>>): Promise<RemoveResult> {
-    const documents = await this.find(filter);
+  async remove({ pkey, condition, ...payload }: RemovePayload): Promise<number> {
+    const collection = this.#collections.get(payload.collection);
+
+    const documents = await this.find({ collection: payload.collection, condition });
     for (const document of documents) {
-      this.#documents.delete(document.id);
+      collection.delete(document[pkey]);
     }
+
     this.broadcast("remove", documents);
-    return new RemoveResult(documents.length);
+
+    return documents.length;
   }
 
-  async count(filter?: Filter<WithId<TSchema>>): Promise<number> {
-    return new Query(filter ?? {}).find(Array.from(this.#documents.values())).count();
+  async count({ collection, condition = {} }: CountPayload): Promise<number> {
+    return new Query(condition).find(this.#collections.documents(collection)).all().length;
   }
 
   async flush(): Promise<void> {
-    this.#documents.clear();
+    this.#collections.flush();
   }
 }

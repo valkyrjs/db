@@ -1,5 +1,5 @@
 import { clone } from "../src/clone.ts";
-import { WithId } from "../src/types.ts";
+import type { WithId } from "../src/types.ts";
 
 const users: WithId<UserDocument>[] = [
   {

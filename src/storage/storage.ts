@@ -1,20 +1,19 @@
-import { UpdateOptions } from "mingo/core";
-import { Cursor } from "mingo/cursor";
-import { UpdateExpression } from "mingo/updater";
+import type { Cursor } from "mingo/cursor";
+import type { AnyObject, Criteria } from "mingo/types";
+import type { Modifier } from "mingo/updater";
 import { Subject } from "rxjs";
 
-import { BroadcastChannel, StorageBroadcast } from "../broadcast.ts";
-import { Document, Filter, WithId } from "../types.ts";
-import { InsertManyResult, InsertOneResult } from "./operators/insert.ts";
-import { RemoveResult } from "./operators/remove.ts";
-import { UpdateResult } from "./operators/update.ts";
+import { BroadcastChannel, type StorageBroadcast } from "../broadcast.ts";
+import type { Prettify } from "../types.ts";
+import type { InsertResult } from "./operators/insert.ts";
+import type { UpdateResult } from "./operators/update.ts";
 
-export abstract class Storage<TSchema extends Document = Document> {
+export abstract class Storage {
   readonly observable: {
-    change: Subject<ChangeEvent<TSchema>>;
+    change: Subject<ChangeEvent>;
     flush: Subject<void>;
   } = {
-    change: new Subject<ChangeEvent<TSchema>>(),
+    change: new Subject<ChangeEvent>(),
     flush: new Subject<void>(),
   };
 
@@ -22,12 +21,9 @@ export abstract class Storage<TSchema extends Document = Document> {
 
   readonly #channel: BroadcastChannel;
 
-  constructor(
-    readonly name: string,
-    readonly id: string = crypto.randomUUID(),
-  ) {
+  constructor(readonly name: string) {
     this.#channel = new BroadcastChannel(`valkyr:db:${name}`);
-    this.#channel.onmessage = ({ data }: MessageEvent<StorageBroadcast<TSchema>>) => {
+    this.#channel.onmessage = ({ data }: MessageEvent<StorageBroadcast>) => {
       if (data.name !== this.name) {
         return;
       }
@@ -72,7 +68,7 @@ export abstract class Storage<TSchema extends Document = Document> {
    |
    */
 
-  broadcast(type: StorageBroadcast<TSchema>["type"], data?: TSchema | TSchema[]): void {
+  broadcast(type: StorageBroadcast["type"], data?: AnyObject | AnyObject[]): void {
     switch (type) {
       case "flush": {
         this.observable.flush.next();
@@ -92,37 +88,23 @@ export abstract class Storage<TSchema extends Document = Document> {
    |--------------------------------------------------------------------------------
    */
 
-  abstract has(id: string): Promise<boolean>;
+  abstract insertOne(payload: InsertOnePayload): Promise<InsertResult>;
 
-  abstract insertOne(document: Partial<WithId<TSchema>>): Promise<InsertOneResult>;
+  abstract insertMany(payload: InsertManyPayload): Promise<InsertResult>;
 
-  abstract insertMany(documents: Partial<WithId<TSchema>>[]): Promise<InsertManyResult>;
+  abstract findById(payload: FindByIdPayload): Promise<AnyObject | undefined>;
 
-  abstract findById(id: string): Promise<WithId<TSchema> | undefined>;
+  abstract find(payload: FindPayload): Promise<AnyObject[]>;
 
-  abstract find(filter?: Filter<WithId<TSchema>>, options?: Options): Promise<WithId<TSchema>[]>;
+  abstract updateOne(payload: UpdatePayload): Promise<UpdateResult>;
 
-  abstract updateOne(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
-  ): Promise<UpdateResult>;
+  abstract updateMany(payload: UpdatePayload): Promise<UpdateResult>;
 
-  abstract updateMany(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
-  ): Promise<UpdateResult>;
+  abstract replace(payload: ReplacePayload): Promise<UpdateResult>;
 
-  abstract replace(filter: Filter<WithId<TSchema>>, document: TSchema): Promise<UpdateResult>;
+  abstract remove(payload: RemovePayload): Promise<number>;
 
-  abstract remove(filter: Filter<WithId<TSchema>>): Promise<RemoveResult>;
-
-  abstract count(filter?: Filter<WithId<TSchema>>): Promise<number>;
+  abstract count(payload: CountPayload): Promise<number>;
 
   abstract flush(): Promise<void>;
 
@@ -143,9 +125,9 @@ export abstract class Storage<TSchema extends Document = Document> {
  |--------------------------------------------------------------------------------
  */
 
-export function addOptions<TSchema extends Document = Document>(
+export function addOptions<TSchema extends AnyObject = AnyObject>(
   cursor: Cursor<TSchema>,
-  options: Options,
+  options: QueryOptions,
 ): Cursor<TSchema> {
   if (options.sort) {
     cursor.sort(options.sort);
@@ -167,17 +149,17 @@ export function addOptions<TSchema extends Document = Document>(
 
 type Status = "loading" | "ready";
 
-export type ChangeEvent<TSchema extends Document = Document> =
+export type ChangeEvent =
   | {
       type: "insertOne" | "updateOne";
-      data: WithId<TSchema>;
+      data: AnyObject;
     }
   | {
       type: "insertMany" | "updateMany" | "remove";
-      data: WithId<TSchema>[];
+      data: AnyObject[];
     };
 
-export type Options = {
+export type QueryOptions = {
   sort?: {
     [key: string]: 1 | -1;
   };
@@ -196,4 +178,69 @@ export type Options = {
 
 export type Index = {
   [index: string]: any;
+};
+
+export type InsertOnePayload = Prettify<
+  CollectionPayload &
+    PrimaryKeyPayload & {
+      values: AnyObject;
+    }
+>;
+
+export type InsertManyPayload = Prettify<
+  CollectionPayload &
+    PrimaryKeyPayload & {
+      values: AnyObject[];
+    }
+>;
+
+export type FindByIdPayload = Prettify<
+  CollectionPayload & {
+    id: string;
+  }
+>;
+
+export type FindPayload = Prettify<
+  CollectionPayload & {
+    condition?: Criteria<AnyObject>;
+    options?: QueryOptions;
+  }
+>;
+
+export type UpdatePayload = Prettify<
+  CollectionPayload &
+    PrimaryKeyPayload & {
+      condition: Criteria<AnyObject>;
+      modifier: Modifier<AnyObject>;
+      arrayFilters?: AnyObject[];
+    }
+>;
+
+export type ReplacePayload = Prettify<
+  CollectionPayload &
+    PrimaryKeyPayload & {
+      condition: Criteria<AnyObject>;
+      document: AnyObject;
+    }
+>;
+
+export type RemovePayload = Prettify<
+  CollectionPayload &
+    PrimaryKeyPayload & {
+      condition: Criteria<AnyObject>;
+    }
+>;
+
+export type CountPayload = Prettify<
+  CollectionPayload & {
+    condition?: Criteria<AnyObject>;
+  }
+>;
+
+type CollectionPayload = {
+  collection: string;
+};
+
+type PrimaryKeyPayload = {
+  pkey: string;
 };

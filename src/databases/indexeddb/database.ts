@@ -1,29 +1,32 @@
-import { IDBPDatabase, openDB } from "idb";
+import { type IDBPDatabase, openDB } from "idb";
 
 import { Collection } from "../../collection.ts";
-import { DBLogger } from "../../logger.ts";
-import { Document } from "../../types.ts";
-import { Registrars } from "../registrars.ts";
-import { IndexedDbStorage } from "./storage.ts";
+import type { DBLogger } from "../../logger.ts";
+import type { Document } from "../../types.ts";
+import type { Registrars } from "../registrars.ts";
+import { IndexedDBStorage } from "./storage.ts";
 
-export class IndexedDatabase<TCollections extends StringRecord<Document>> {
+export class IndexedDB<TCollections extends StringRecord<Document>> {
   readonly #collections = new Map<keyof TCollections, Collection<TCollections[keyof TCollections]>>();
   readonly #db: Promise<IDBPDatabase<unknown>>;
 
   constructor(readonly options: Options) {
     this.#db = openDB(options.name, options.version ?? 1, {
       upgrade: (db: IDBPDatabase) => {
-        for (const { name, indexes = [] } of options.registrars) {
-          const store = db.createObjectStore(name as string, { keyPath: "id" });
-          store.createIndex("id", "id", { unique: true });
+        for (const { name, primaryKey = "id", indexes = [] } of options.registrars) {
+          const store = db.createObjectStore(name as string, { keyPath: primaryKey });
+          store.createIndex(primaryKey, primaryKey, { unique: true });
           for (const [keyPath, options] of indexes) {
             store.createIndex(keyPath, keyPath, options);
           }
         }
       },
     });
-    for (const { name } of options.registrars) {
-      this.#collections.set(name, new Collection(name, new IndexedDbStorage(name, this.#db, options.log ?? log)));
+    for (const { name, primaryKey = "id" } of options.registrars) {
+      this.#collections.set(
+        name,
+        new Collection(name, new IndexedDBStorage(name, primaryKey, this.#db, options.log ?? log)),
+      );
     }
   }
 
@@ -33,9 +36,7 @@ export class IndexedDatabase<TCollections extends StringRecord<Document>> {
    |--------------------------------------------------------------------------------
    */
 
-  collection<TSchema extends TCollections[Name], Name extends keyof TCollections = keyof TCollections>(
-    name: Name,
-  ): Collection<TSchema> {
+  collection<Name extends keyof TCollections = keyof TCollections>(name: Name) {
     const collection = this.#collections.get(name);
     if (collection === undefined) {
       throw new Error(`Collection '${name as string}' not found`);

@@ -1,6 +1,6 @@
 import { Collection } from "../../collection.ts";
-import { Document } from "../../types.ts";
-import { Registrars } from "../registrars.ts";
+import type { Document } from "../../types.ts";
+import type { Registrars } from "../registrars.ts";
 import { MemoryStorage } from "./storage.ts";
 
 type Options = {

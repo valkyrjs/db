@@ -3,7 +3,7 @@ import { expect } from "expect";
 
 import { Collection } from "../src/collection.ts";
 import { MemoryStorage } from "../src/databases/memory/storage.ts";
-import { getUsers, UserDocument } from "./users.mock.ts";
+import { getUsers, type UserDocument } from "./users.mock.ts";
 
 /*
  |--------------------------------------------------------------------------------

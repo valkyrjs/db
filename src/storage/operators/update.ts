@@ -1,6 +1,4 @@
-export class UpdateResult {
-  constructor(
-    readonly matched = 0,
-    readonly modified = 0,
-  ) {}
-}
+export type UpdateResult = {
+  matchedCount: number;
+  modifiedCount: number;
+};

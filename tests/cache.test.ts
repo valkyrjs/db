@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 import { expect } from "expect";
 
 import { IndexedDbCache } from "../src/databases/indexeddb/cache.ts";
-import { Options } from "../src/storage/storage.ts";
+import type { Options } from "../src/storage/storage.ts";
 import type { WithId } from "../src/types.ts";
 
 describe("IndexedDbCache", () => {

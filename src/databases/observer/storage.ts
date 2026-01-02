@@ -1,23 +1,16 @@
-import { createUpdater, Query } from "mingo";
-import { UpdateOptions } from "mingo/core";
-import { UpdateExpression } from "mingo/updater";
+import { Query, update } from "mingo";
+import type { Criteria, Options } from "mingo/types";
+import type { CloneMode, Modifier } from "mingo/updater";
 
+import { getDocumentWithPrimaryKey } from "../../primary-key.ts";
 import { DuplicateDocumentError } from "../../storage/errors.ts";
-import {
-  getInsertManyResult,
-  getInsertOneResult,
-  InsertManyResult,
-  InsertOneResult,
-} from "../../storage/operators/insert.ts";
-import { RemoveResult } from "../../storage/operators/remove.ts";
+import type { InsertResult } from "../../storage/operators/insert.ts";
 import { UpdateResult } from "../../storage/operators/update.ts";
-import { addOptions, Options, Storage } from "../../storage/storage.ts";
-import { Document, Filter, WithId } from "../../types.ts";
+import { addOptions, type QueryOptions, Storage } from "../../storage/storage.ts";
+import type { AnyDocument } from "../../types.ts";
 
-const update = createUpdater({ cloneMode: "deep" });
-
-export class ObserverStorage<TSchema extends Document = Document> extends Storage<TSchema> {
-  readonly #documents = new Map<string, WithId<TSchema>>();
+export class ObserverStorage extends Storage {
+  readonly #documents = new Map<string, AnyDocument>();
 
   async resolve() {
     return this;
@@ -27,48 +20,48 @@ export class ObserverStorage<TSchema extends Document = Document> extends Storag
     return this.#documents.has(id);
   }
 
-  async insertOne(data: Partial<TSchema>): Promise<InsertOneResult> {
-    const document = { ...data, id: data.id ?? crypto.randomUUID() } as WithId<TSchema>;
-    if (await this.has(document.id)) {
+  async insertOne(values: AnyDocument): Promise<InsertResult> {
+    const document = getDocumentWithPrimaryKey(this.primaryKey, values);
+    if (await this.has(document[this.primaryKey])) {
       throw new DuplicateDocumentError(document, this as any);
     }
-    this.#documents.set(document.id, document);
+    this.#documents.set(document[this.primaryKey], document);
     return getInsertOneResult(document);
   }
 
-  async insertMany(documents: Partial<TSchema>[]): Promise<InsertManyResult> {
+  async insertMany(list: TSchema[]): Promise<InsertResult> {
     const result: TSchema[] = [];
-    for (const data of documents) {
-      const document = { ...data, id: data.id ?? crypto.randomUUID() } as WithId<TSchema>;
+    for (const values of list) {
+      const document = getDocumentWithPrimaryKey(this.primaryKey, values);
       result.push(document);
       this.#documents.set(document.id, document);
     }
     return getInsertManyResult(result);
   }
 
-  async findById(id: string): Promise<WithId<TSchema> | undefined> {
+  async findById(id: string): Promise<TSchema | undefined> {
     return this.#documents.get(id);
   }
 
-  async find(filter?: Filter<WithId<TSchema>>, options?: Options): Promise<WithId<TSchema>[]> {
+  async find(filter?: Filter<TSchema>, options?: QueryOptions): Promise<TSchema[]> {
     let cursor = new Query(filter ?? {}).find<TSchema>(Array.from(this.#documents.values()));
     if (options !== undefined) {
       cursor = addOptions(cursor, options);
     }
-    return cursor.all() as WithId<TSchema>[];
+    return cursor.all();
   }
 
   async updateOne(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
+    filter: Filter<TSchema>,
+    modifier: Modifier<TSchema>,
+    arrayFilters?: Filter<TSchema>[],
+    condition?: Criteria<TSchema>,
+    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
   ): Promise<UpdateResult> {
     const query = new Query(filter);
     for (const document of Array.from(this.#documents.values())) {
       if (query.test(document) === true) {
-        const modified = update(document, expr, arrayFilters, condition, options);
+        const modified = update(document, modifier, arrayFilters, condition, options);
         if (modified.length > 0) {
           this.#documents.set(document.id, document);
           this.broadcast("updateOne", document);
@@ -81,15 +74,15 @@ export class ObserverStorage<TSchema extends Document = Document> extends Storag
   }
 
   async updateMany(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
+    filter: Filter<TSchema>,
+    modifier: Modifier<TSchema>,
+    arrayFilters?: Filter<TSchema>[],
+    condition?: Criteria<TSchema>,
+    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
   ): Promise<UpdateResult> {
     const query = new Query(filter);
 
-    const documents: WithId<TSchema>[] = [];
+    const documents: TSchema[] = [];
 
     let matchedCount = 0;
     let modifiedCount = 0;
@@ -97,7 +90,7 @@ export class ObserverStorage<TSchema extends Document = Document> extends Storag
     for (const document of Array.from(this.#documents.values())) {
       if (query.test(document) === true) {
         matchedCount += 1;
-        const modified = update(filter, expr, arrayFilters, condition, options);
+        const modified = update(document, modifier, arrayFilters, condition, options);
         if (modified.length > 0) {
           modifiedCount += 1;
           documents.push(document);
@@ -111,10 +104,10 @@ export class ObserverStorage<TSchema extends Document = Document> extends Storag
     return new UpdateResult(matchedCount, modifiedCount);
   }
 
-  async replace(filter: Filter<WithId<TSchema>>, document: WithId<TSchema>): Promise<UpdateResult> {
+  async replace(filter: Filter<TSchema>, document: TSchema): Promise<UpdateResult> {
     const query = new Query(filter);
 
-    const documents: WithId<TSchema>[] = [];
+    const documents: TSchema[] = [];
 
     let matchedCount = 0;
     let modifiedCount = 0;
@@ -131,7 +124,7 @@ export class ObserverStorage<TSchema extends Document = Document> extends Storag
     return new UpdateResult(matchedCount, modifiedCount);
   }
 
-  async remove(filter: Filter<WithId<TSchema>>): Promise<RemoveResult> {
+  async remove(filter: Filter<TSchema>): Promise<RemoveResult> {
     const documents = Array.from(this.#documents.values());
     const query = new Query(filter);
     let count = 0;
@@ -144,8 +137,8 @@ export class ObserverStorage<TSchema extends Document = Document> extends Storag
     return new RemoveResult(count);
   }
 
-  async count(filter?: Filter<WithId<TSchema>>): Promise<number> {
-    return new Query(filter ?? {}).find(Array.from(this.#documents.values())).count();
+  async count(filter?: Filter<TSchema>): Promise<number> {
+    return new Query(filter ?? {}).find(Array.from(this.#documents.values())).all().length;
   }
 
   async flush(): Promise<void> {

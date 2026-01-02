@@ -1,25 +1,28 @@
-import { RawObject } from "mingo/types";
-
-import { Document } from "../types.ts";
-import type { Storage } from "./storage.ts";
+import type { AnyObject } from "mingo/types";
 
 export class DuplicateDocumentError extends Error {
   readonly type = "DuplicateDocumentError";
 
   constructor(
-    readonly document: Document,
-    storage: Storage,
+    readonly collection: string,
+    readonly document: AnyObject,
   ) {
-    super(
-      `Collection Insert Violation: Document '${document.id}' already exists in ${storage.name} collection ${storage.id}`,
-    );
+    super(`Collection Insert Violation: Document '${document.id}' already exists in '${collection}' collection`);
+  }
+}
+
+export class CollectionNotFoundError extends Error {
+  readonly type = "CollectionNotFoundError";
+
+  constructor(readonly collection: string) {
+    super(`Collection Retrieve Violation: Collection '${collection}' does not exist`);
   }
 }
 
 export class DocumentNotFoundError extends Error {
   readonly type = "DocumentNotFoundError";
 
-  constructor(readonly criteria: RawObject) {
+  constructor(readonly criteria: AnyObject) {
     super(`Collection Update Violation: Document matching criteria does not exists`);
   }
 }

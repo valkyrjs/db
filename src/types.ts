@@ -1,12 +1,8 @@
 import type { BSONRegExp, BSONType } from "bson";
 
-export type Document = {
-  [key: string]: any;
-};
+export type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
-export type WithId<TSchema> = {
-  id: string;
-} & TSchema;
+export type AnyDocument = Record<string, any>;
 
 export type Filter<TSchema> = {
   [P in keyof TSchema]?: Condition<TSchema[P]>;
@@ -129,12 +125,11 @@ type Flatten<Type> = Type extends ReadonlyArray<infer Item> ? Item : Type;
 
 type IsAny<Type, ResultIfAny, ResultIfNotAny> = true extends false & Type ? ResultIfAny : ResultIfNotAny;
 
-type FilterOperations<T> =
-  T extends Record<string, any>
-    ? {
-        [key in keyof T]?: FilterOperators<T[key]>;
-      }
-    : FilterOperators<T>;
+type FilterOperations<T> = T extends Record<string, any>
+  ? {
+      [key in keyof T]?: FilterOperators<T[key]>;
+    }
+  : FilterOperators<T>;
 
 type ArrayOperator<Type> = {
   $each?: Array<Flatten<Type>>;

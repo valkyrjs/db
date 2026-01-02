@@ -1,9 +1,10 @@
-import { IDBPDatabase } from "idb";
-import { createUpdater, Query } from "mingo";
-import { UpdateOptions } from "mingo/core";
-import { UpdateExpression } from "mingo/updater";
+import type { IDBPDatabase } from "idb";
+import { Query, update } from "mingo";
+import type { Criteria, Options } from "mingo/types";
+import type { CloneMode, Modifier } from "mingo/updater";
 
-import { DBLogger, InsertLog, QueryLog, RemoveLog, ReplaceLog, UpdateLog } from "../../logger.ts";
+import { type DBLogger, InsertLog, QueryLog, RemoveLog, ReplaceLog, UpdateLog } from "../../logger.ts";
+import { getDocumentWithPrimaryKey } from "../../primary-key.ts";
 import { DuplicateDocumentError } from "../../storage/errors.ts";
 import {
   getInsertManyResult,
@@ -13,17 +14,18 @@ import {
 } from "../../storage/operators/insert.ts";
 import { RemoveResult } from "../../storage/operators/remove.ts";
 import { UpdateResult } from "../../storage/operators/update.ts";
-import { addOptions, Index, Options, Storage } from "../../storage/storage.ts";
-import type { Document, Filter, WithId } from "../../types.ts";
-import { IndexedDbCache } from "./cache.ts";
+import { addOptions, type Index, type QueryOptions, Storage } from "../../storage/storage.ts";
+import type { Document, Filter } from "../../types.ts";
+import { IndexedDBCache } from "./cache.ts";
 
 const OBJECT_PROTOTYPE = Object.getPrototypeOf({});
 const OBJECT_TAG = "[object Object]";
 
-const update = createUpdater({ cloneMode: "deep" });
-
-export class IndexedDbStorage<TSchema extends Document = Document> extends Storage<TSchema> {
-  readonly #cache = new IndexedDbCache<TSchema>();
+export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Document = Document> extends Storage<
+  TPrimaryKey,
+  TSchema
+> {
+  readonly #cache = new IndexedDBCache<TSchema>();
 
   readonly #promise: Promise<IDBPDatabase>;
 
@@ -31,10 +33,11 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
 
   constructor(
     name: string,
+    primaryKey: TPrimaryKey,
     promise: Promise<IDBPDatabase>,
     readonly log: DBLogger,
   ) {
-    super(name);
+    super(name, primaryKey);
     this.#promise = promise;
   }
 
@@ -66,11 +69,12 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
    |--------------------------------------------------------------------------------
    */
 
-  async insertOne(data: Partial<TSchema>): Promise<InsertOneResult> {
+  async insertOne(values: TSchema | Omit<TSchema, TPrimaryKey>): Promise<InsertOneResult> {
     const logger = new InsertLog(this.name);
 
-    const document = { ...data, id: data.id ?? crypto.randomUUID() } as any;
-    if (await this.has(document.id)) {
+    const document = getDocumentWithPrimaryKey(this.primaryKey, values);
+
+    if (await this.has(document[this.primaryKey])) {
       throw new DuplicateDocumentError(document, this as any);
     }
     await this.db.transaction(this.name, "readwrite", { durability: "relaxed" }).store.add(document);
@@ -83,15 +87,15 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
     return getInsertOneResult(document);
   }
 
-  async insertMany(data: Partial<TSchema>[]): Promise<InsertManyResult> {
+  async insertMany(values: (TSchema | Omit<TSchema, TPrimaryKey>)[]): Promise<InsertManyResult> {
     const logger = new InsertLog(this.name);
 
-    const documents: WithId<TSchema>[] = [];
+    const documents: TSchema[] = [];
 
     const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
     await Promise.all(
-      data.map((data) => {
-        const document = { ...data, id: data.id ?? crypto.randomUUID() } as WithId<TSchema>;
+      values.map((values) => {
+        const document = getDocumentWithPrimaryKey(this.primaryKey, values);
         documents.push(document);
         return tx.store.add(document);
       }),
@@ -112,11 +116,11 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
    |--------------------------------------------------------------------------------
    */
 
-  async findById(id: string): Promise<WithId<TSchema> | undefined> {
+  async findById(id: string): Promise<TSchema | undefined> {
     return this.db.getFromIndex(this.name, "id", id);
   }
 
-  async find(filter: Filter<WithId<TSchema>>, options: Options = {}): Promise<WithId<TSchema>[]> {
+  async find(filter: Filter<TSchema>, options: QueryOptions = {}): Promise<TSchema[]> {
     const logger = new QueryLog(this.name, { filter, options });
 
     const hashCode = this.#cache.hash(filter, options);
@@ -132,7 +136,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
       cursor = addOptions(cursor, options);
     }
 
-    const documents = cursor.all() as WithId<TSchema>[];
+    const documents = cursor.all() as TSchema[];
     this.#cache.set(this.#cache.hash(filter, options), documents);
 
     this.log(logger.result());
@@ -151,8 +155,8 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
       if (indexNames.contains(key) === true) {
         let val: any;
         if (isObject(filter[key]) === true) {
-          if ((filter as any)[key]["$in"] !== undefined) {
-            val = (filter as any)[key]["$in"];
+          if ((filter as any)[key].$in !== undefined) {
+            val = (filter as any)[key].$in;
           }
         } else {
           val = filter[key];
@@ -168,7 +172,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
     return {};
   }
 
-  async #getAll({ index, offset, range, limit }: Options) {
+  async #getAll({ index, offset, range, limit }: QueryOptions) {
     if (index !== undefined) {
       return this.#getAllByIndex(index);
     }
@@ -230,34 +234,34 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
    */
 
   async updateOne(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
+    filter: Filter<TSchema>,
+    modifier: Modifier<TSchema>,
+    arrayFilters?: Filter<TSchema>[],
+    condition?: Criteria<TSchema>,
+    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
   ): Promise<UpdateResult> {
     if (typeof filter.id === "string") {
-      return this.#update(filter.id, expr, arrayFilters, condition, options);
+      return this.#update(filter.id, modifier, arrayFilters, condition, options);
     }
     const documents = await this.find(filter);
     if (documents.length > 0) {
-      return this.#update(documents[0].id, expr, arrayFilters, condition, options);
+      return this.#update(documents[0].id, modifier, arrayFilters, condition, options);
     }
     return new UpdateResult(0, 0);
   }
 
   async updateMany(
-    filter: Filter<WithId<TSchema>>,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
+    filter: Filter<TSchema>,
+    modifier: Modifier<TSchema>,
+    arrayFilters?: Filter<TSchema>[],
+    condition?: Criteria<TSchema>,
+    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
   ): Promise<UpdateResult> {
-    const logger = new UpdateLog(this.name, { filter, expr, arrayFilters, condition, options });
+    const logger = new UpdateLog(this.name, { filter, modifier, arrayFilters, condition, options });
 
     const ids = await this.find(filter).then((data) => data.map((d) => d.id));
 
-    const documents: WithId<TSchema>[] = [];
+    const documents: TSchema[] = [];
     let modifiedCount = 0;
 
     const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
@@ -267,7 +271,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
           if (current === undefined) {
             return;
           }
-          const modified = update(current, expr, arrayFilters, condition, options);
+          const modified = update(current, modifier, arrayFilters, condition, options);
           if (modified.length > 0) {
             modifiedCount += 1;
             documents.push(current);
@@ -287,12 +291,12 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
     return new UpdateResult(ids.length, modifiedCount);
   }
 
-  async replace(filter: Filter<WithId<TSchema>>, document: WithId<TSchema>): Promise<UpdateResult> {
+  async replace(filter: Filter<TSchema>, document: TSchema): Promise<UpdateResult> {
     const logger = new ReplaceLog(this.name, document);
 
     const ids = await this.find(filter).then((data) => data.map((d) => d.id));
 
-    const documents: WithId<TSchema>[] = [];
+    const documents: TSchema[] = [];
     const count = ids.length;
 
     const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
@@ -315,12 +319,12 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
 
   async #update(
     id: string | number,
-    expr: UpdateExpression,
-    arrayFilters?: Filter<WithId<TSchema>>[],
-    condition?: Filter<WithId<TSchema>>,
-    options?: UpdateOptions,
+    modifier: Modifier<TSchema>,
+    arrayFilters?: Filter<TSchema>[],
+    condition?: Criteria<TSchema>,
+    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
   ): Promise<UpdateResult> {
-    const logger = new UpdateLog(this.name, { id, expr });
+    const logger = new UpdateLog(this.name, { id, modifier });
 
     const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
 
@@ -330,7 +334,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
       return new UpdateResult(0, 0);
     }
 
-    const modified = await update(current, expr, arrayFilters, condition, options);
+    const modified = await update(current, modifier, arrayFilters, condition, options);
     if (modified.length > 0) {
       await tx.store.put(current);
     }
@@ -352,7 +356,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
    |--------------------------------------------------------------------------------
    */
 
-  async remove(filter: Filter<WithId<TSchema>>): Promise<RemoveResult> {
+  async remove(filter: Filter<TSchema>): Promise<RemoveResult> {
     const logger = new RemoveLog(this.name, { filter });
 
     const documents = await this.find(filter);
@@ -375,7 +379,7 @@ export class IndexedDbStorage<TSchema extends Document = Document> extends Stora
    |--------------------------------------------------------------------------------
    */
 
-  async count(filter?: Filter<WithId<TSchema>>): Promise<number> {
+  async count(filter?: Filter<TSchema>): Promise<number> {
     if (filter !== undefined) {
       return (await this.find(filter)).length;
     }

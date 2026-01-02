@@ -2,7 +2,7 @@ import { describe, it } from "@std/testing/bdd";
 import { expect } from "expect";
 
 import { hashCodeQuery } from "../src/hash.ts";
-import { Options } from "../src/mod.ts";
+import type { Options } from "../src/mod.ts";
 
 describe("hashCodeQuery", () => {
   const filter = { name: { $eq: "Document 1" } };

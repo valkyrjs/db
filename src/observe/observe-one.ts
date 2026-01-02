@@ -1,5 +1,5 @@
-import { Collection } from "../collection.ts";
-import { Document, Filter, WithId } from "../types.ts";
+import type { Collection } from "../collection.ts";
+import type { Document, Filter, WithId } from "../types.ts";
 import { isMatch } from "./is-match.ts";
 
 export function observeOne<TSchema extends Document = Document>(

@@ -1,6 +1,6 @@
 {
   "name": "@valkyr/db",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "exports": {
     ".": "./src/mod.ts"
   },
@@ -8,12 +8,19 @@
     "exclude": [".github", ".vscode", ".gitignore", "tests"]
   },
   "tasks": {
-    "check": "deno check ./src/mod.ts",
-    "lint": "npx eslint -c eslint.config.mjs --fix .",
-    "fmt": "npx prettier --write .",
-    "test": "deno test --allow-all",
+    "check": {
+      "command": "deno run -A npm:@biomejs/biome check --write ./src",
+      "description": "Format, lint, and organize imports of the entire project."
+    },
+    "test": {
+      "command": "deno test --allow-all",
+      "description": "Runs all defined tests across the entire project."
+    },
     "test:publish": "deno publish --dry-run",
-    "ncu": "npx ncu -u -p npm"
+    "ncu": {
+      "command": "npx ncu -u -p npm",
+      "description": "Updates all the dependencies in package.json to their latest versions."
+    }
   },
   "compilerOptions": {
     "lib": ["deno.window", "dom"]
