@@ -125,11 +125,12 @@ type Flatten<Type> = Type extends ReadonlyArray<infer Item> ? Item : Type;
 
 type IsAny<Type, ResultIfAny, ResultIfNotAny> = true extends false & Type ? ResultIfAny : ResultIfNotAny;
 
-type FilterOperations<T> = T extends Record<string, any>
-  ? {
-      [key in keyof T]?: FilterOperators<T[key]>;
-    }
-  : FilterOperators<T>;
+type FilterOperations<T> =
+  T extends Record<string, any>
+    ? {
+        [key in keyof T]?: FilterOperators<T[key]>;
+      }
+    : FilterOperators<T>;
 
 type ArrayOperator<Type> = {
   $each?: Array<Flatten<Type>>;

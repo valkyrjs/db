@@ -9,17 +9,33 @@
   },
   "tasks": {
     "check": {
-      "command": "deno run -A npm:@biomejs/biome check --write ./src",
-      "description": "Format, lint, and organize imports of the entire project."
+      "description": "Run formatting/linting with Biome and type-check the source code with Deno.",
+      "dependencies": ["check:biome", "check:deno"]
     },
+
+    "check:biome": {
+      "command": "deno run -A npm:@biomejs/biome@2.3.10 check --write ./src",
+      "description": "Format, lint, and organize imports in the src directory using Biome."
+    },
+
+    "check:deno": {
+      "command": "deno check ./src",
+      "description": "Perform full TypeScript type-checking on the src directory."
+    },
+
     "test": {
       "command": "deno test --allow-all",
-      "description": "Runs all defined tests across the entire project."
+      "description": "Run all tests using Deno’s built-in test runner."
     },
-    "test:publish": "deno publish --dry-run",
+
+    "test:publish": {
+      "command": "deno publish --dry-run",
+      "description": "Validate that the package can be published without errors."
+    },
+
     "ncu": {
-      "command": "npx ncu -u -p npm",
-      "description": "Updates all the dependencies in package.json to their latest versions."
+      "command": "npx npm-check-updates -u -p npm",
+      "description": "Update npm dependencies in package.json to their latest compatible versions."
     }
   },
   "compilerOptions": {

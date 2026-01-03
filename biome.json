@@ -1,4 +1,6 @@
 {
+  "$schema": "https://biomejs.dev/schemas/2.0.5/schema.json",
+  "root": true,
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,
@@ -13,11 +15,7 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noConfusingVoidType": "off",
         "noExplicitAny": "off"
-      },
-      "complexity": {
-        "noBannedTypes": "off"
       }
     }
   },
@@ -28,15 +26,7 @@
         "organizeImports": {
           "level": "on",
           "options": {
-            "groups": [
-              [":BUN:", ":NODE:"],
-              ":BLANK_LINE:",
-              ":PACKAGE:",
-              ":BLANK_LINE:",
-              [":ALIAS:"],
-              ":BLANK_LINE:",
-              ":PATH:"
-            ]
+            "groups": [[":NODE:"], ":BLANK_LINE:", ":PACKAGE:", ":BLANK_LINE:", [":ALIAS:"], ":BLANK_LINE:", ":PATH:"]
           }
         }
       }

@@ -1,10 +1,4 @@
 {
-  "name": "@valkyr/db",
-  "version": "0.0.0",
-  "description": "Simple client side storage solution written in TypeScript.",
-  "repository": "https://github.com/valkyrjs/db.git",
-  "bugs": "https://github.com/valkyrjs/db/issues",
-  "license": "MIT",
   "dependencies": {
     "bson": "7.0.0",
     "dot-prop": "10.1.0",
@@ -20,7 +14,7 @@
     "@std/assert": "npm:@jsr/std__assert@1",
     "@std/testing": "npm:@jsr/std__testing@1",
     "@valkyr/testcontainers": "npm:@jsr/valkyr__testcontainers@2",
-    "@biomejs/biome": "2.2.4",
+    "@biomejs/biome": "2.3.10",
     "expect": "30.2.0",
     "fake-indexeddb": "6.2.5"
   }
