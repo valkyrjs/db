@@ -24,7 +24,7 @@
     },
 
     "test": {
-      "command": "deno test --allow-all",
+      "command": "deno test --allow-all ./src",
       "description": "Run all tests using Deno’s built-in test runner."
     },
 

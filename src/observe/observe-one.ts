@@ -1,28 +1,31 @@
+import type { Subscription } from "@valkyr/event-emitter";
+import type { Criteria } from "mingo/types";
+
 import type { Collection } from "../collection.ts";
-import type { Document, Filter, WithId } from "../types.ts";
+import type { AnyDocument } from "../types.ts";
 import { isMatch } from "./is-match.ts";
 
-export function observeOne<TSchema extends Document = Document>(
-  collection: Collection<TSchema>,
-  filter: Filter<WithId<TSchema>>,
-  onChange: (document: Document | undefined) => void,
-): {
-  unsubscribe: () => void;
-} {
-  collection.findOne(filter).then(onChange);
-
-  const subscription = collection.observable.change.subscribe(({ type, data }) => {
+export function observeOne<TCollection extends Collection>(
+  collection: TCollection,
+  condition: Criteria<AnyDocument>,
+  onChange: (document: AnyDocument | undefined) => void,
+): Subscription {
+  collection.findOne(condition).then((document) => onChange(document));
+  return collection.onChange(({ type, data }) => {
     switch (type) {
-      case "insertOne":
-      case "updateOne": {
-        if (isMatch<TSchema>(data, filter) === true) {
-          onChange(data);
+      case "insert":
+      case "update": {
+        for (const document of data) {
+          if (isMatch(document, condition) === true) {
+            onChange(document);
+            break;
+          }
         }
         break;
       }
       case "remove": {
         for (const document of data) {
-          if (isMatch<TSchema>(document, filter) === true) {
+          if (isMatch(document, condition) === true) {
             onChange(undefined);
             break;
           }
@@ -31,10 +34,4 @@ export function observeOne<TSchema extends Document = Document>(
       }
     }
   });
-
-  return {
-    unsubscribe: () => {
-      subscription.unsubscribe();
-    },
-  };
 }

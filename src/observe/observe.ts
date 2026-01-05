@@ -1,55 +1,79 @@
+import type { Subscription } from "@valkyr/event-emitter";
 import { Query } from "mingo";
-import type { AnyObject, Criteria } from "mingo/types";
+import type { Criteria } from "mingo/types";
 
 import type { Collection } from "../collection.ts";
-import { addOptions, type ChangeEvent, type QueryOptions } from "../storage/mod.ts";
+import { addOptions, type ChangeEvent, type QueryOptions } from "../storage.ts";
 import type { AnyDocument } from "../types.ts";
-import { Store } from "./store.ts";
+import { isMatch } from "./is-match.ts";
 
-export function observe<TCollection extends Collection, TSchema extends AnyObject = TCollection["$schema"]>(
+export function observe<TCollection extends Collection>(
   collection: TCollection,
-  condition: Criteria<TSchema>,
+  condition: Criteria<AnyDocument>,
   options: QueryOptions | undefined,
-  onChange: (documents: TSchema[], changed: TSchema[], type: ChangeEvent["type"]) => void,
-): {
-  unsubscribe: () => void;
-} {
-  const store = Store.create();
+  onChange: (documents: AnyDocument[], changed: AnyDocument[], type: ChangeEvent["type"]) => void,
+): Subscription {
+  const documents = new Map<string | number, AnyDocument>();
 
   let debounce: any;
 
-  collection.find(condition, options).then(async (documents) => {
-    const resolved = await store.resolve(documents);
-    onChange(resolved, resolved, "insertMany");
+  // ### Init
+  // Find the initial documents and send them to the change listener.
+
+  collection.findMany(condition, options).then(async (documents) => {
+    onChange(documents, documents, "insert");
   });
 
+  // ### Subscriptions
+
   const subscriptions = [
-    collection.observable.flush.subscribe(() => {
+    collection.onFlush(() => {
       clearTimeout(debounce);
-      store.flush();
       onChange([], [], "remove");
     }),
-    collection.observable.change.subscribe(async ({ type, data }) => {
-      let changed: AnyObject[] = [];
+    collection.onChange(async ({ type, data }) => {
+      const changed: AnyDocument[] = [];
       switch (type) {
-        case "insertOne":
-        case "updateOne": {
-          changed = await store[type](data, condition);
+        case "insert": {
+          for (const document of data) {
+            if (isMatch(document, condition)) {
+              documents.set(collection.getPrimaryKeyValue(document), document);
+              changed.push(document);
+            }
+          }
           break;
         }
-        case "insertMany":
-        case "updateMany":
+        case "update": {
+          for (const document of data) {
+            const id = collection.getPrimaryKeyValue(document);
+            if (documents.has(id)) {
+              if (isMatch(document, condition)) {
+                documents.set(id, document);
+              } else {
+                documents.delete(id);
+              }
+              changed.push(document);
+            } else if (isMatch(document, condition)) {
+              documents.set(id, document);
+              changed.push(document);
+            }
+          }
+          break;
+        }
         case "remove": {
-          changed = await store[type](data, condition);
+          for (const document of data) {
+            if (isMatch(document, condition)) {
+              documents.delete(collection.getPrimaryKeyValue(document));
+              changed.push(document);
+            }
+          }
           break;
         }
       }
       if (changed.length > 0) {
         clearTimeout(debounce);
         debounce = setTimeout(() => {
-          store.getDocuments().then((documents) => {
-            onChange(applyQueryOptions(documents, options), changed, type);
-          });
+          onChange(applyQueryOptions(Array.from(documents.values()), options), changed, type);
         }, 0);
       }
     }),
@@ -60,14 +84,13 @@ export function observe<TCollection extends Collection, TSchema extends AnyObjec
       for (const subscription of subscriptions) {
         subscription.unsubscribe();
       }
-      store.destroy();
     },
   };
 }
 
 function applyQueryOptions(documents: AnyDocument[], options?: QueryOptions): AnyDocument[] {
   if (options !== undefined) {
-    return addOptions(new Query({}).find<AnyDocument>(documents), options).all();
+    return addOptions<AnyDocument>(new Query({}).find<AnyDocument>(documents), options).all();
   }
   return documents;
 }

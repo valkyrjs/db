@@ -1,10 +1,11 @@
 import { Query } from "mingo";
+import type { Criteria } from "mingo/types";
 
-import type { Document, Filter, WithId } from "../types.ts";
+import type { AnyDocument } from "../types.ts";
 
-export function isMatch<TSchema extends Document = Document>(
-  document: WithId<TSchema>,
-  filter?: Filter<WithId<TSchema>>,
+export function isMatch<TSchema extends AnyDocument = AnyDocument>(
+  document: TSchema,
+  condition?: Criteria<TSchema>,
 ): boolean {
-  return !filter || new Query(filter).test(document);
+  return condition === undefined || new Query(condition).test(document);
 }

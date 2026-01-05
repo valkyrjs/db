@@ -1,11 +1,12 @@
+import type { Subscription } from "@valkyr/event-emitter";
 import type { AnyObject, Criteria } from "mingo/types";
 import type { Modifier } from "mingo/updater";
-import { Observable, type Subject, type Subscription } from "rxjs";
-import type z from "zod";
 import type { ZodObject, ZodRawShape } from "zod";
+import z from "zod";
 
 import { observe, observeOne } from "./observe/mod.ts";
-import type { ChangeEvent, InsertResult, QueryOptions, Storage, UpdateResult } from "./storage/mod.ts";
+import type { Index } from "./registrars.ts";
+import type { ChangeEvent, QueryOptions, Storage, UpdateResult } from "./storage.ts";
 import type { AnyDocument } from "./types.ts";
 
 /*
@@ -16,23 +17,54 @@ import type { AnyDocument } from "./types.ts";
 
 export class Collection<
   TOptions extends AnyCollectionOptions = AnyCollectionOptions,
-  TAdapter extends Storage = TOptions["adapter"],
-  TPrimaryKey extends string = TOptions["primaryKey"],
+  TStorage extends Storage = TOptions["storage"],
   TSchema extends AnyDocument = z.output<ZodObject<TOptions["schema"]>>,
 > {
   declare readonly $schema: TSchema;
 
-  constructor(readonly options: TOptions) {}
+  readonly #schema: ZodObject<TOptions["schema"]>;
+  readonly #pkey: string | number;
 
-  get observable(): {
-    change: Subject<ChangeEvent>;
-    flush: Subject<void>;
-  } {
-    return this.storage.observable;
+  constructor(readonly options: TOptions) {
+    this.#schema = z.strictObject(options.schema);
+    this.#pkey = this.primaryKey;
   }
 
-  get storage(): TAdapter {
-    return this.options.adapter;
+  get name(): string {
+    return this.options.name;
+  }
+
+  get storage(): TStorage {
+    return this.options.storage;
+  }
+
+  get schema(): TOptions["schema"] {
+    return this.options.schema;
+  }
+
+  get primaryKey(): string {
+    for (const index of this.options.indexes ?? []) {
+      if (index[1]?.primary === true) {
+        return index[0] as string;
+      }
+    }
+    throw new Error(`Collection '${this.name}' is missing required primary key assignment.`);
+  }
+
+  /*
+ |--------------------------------------------------------------------------------
+ | Utilities
+ |--------------------------------------------------------------------------------
+ */
+
+  getPrimaryKeyValue(document: AnyDocument): string | number {
+    const id = document[this.#pkey];
+    if (id === undefined || typeof id !== "string") {
+      throw new Error(
+        `Primary Key: Missing primary key '${this.#pkey}' on given document: ${JSON.stringify(document, null, 2)}`,
+      );
+    }
+    return id;
   }
 
   /*
@@ -41,73 +73,20 @@ export class Collection<
    |--------------------------------------------------------------------------------
    */
 
-  async insertOne(values: TSchema | Omit<TSchema, TPrimaryKey>): Promise<InsertResult> {
-    return this.storage.resolve().then((storage) =>
-      storage.insertOne({
-        collection: this.options.name,
-        pkey: this.options.primaryKey,
-        values,
-      }),
-    );
+  async insert(documents: TSchema[]): Promise<void> {
+    return this.storage.resolve().then((storage) => storage.insert(documents));
   }
 
-  async insertMany(values: (TSchema | Omit<TSchema, TPrimaryKey>)[]): Promise<InsertResult> {
-    return this.storage.resolve().then((storage) =>
-      storage.insertMany({
-        collection: this.options.name,
-        pkey: this.options.primaryKey,
-        values,
-      }),
-    );
-  }
-
-  async updateOne(
+  async update(
     condition: Criteria<TSchema>,
     modifier: Modifier<TSchema>,
     arrayFilters?: AnyObject[],
   ): Promise<UpdateResult> {
-    return this.storage.resolve().then((storage) =>
-      storage.updateOne({
-        collection: this.options.name,
-        pkey: this.options.primaryKey,
-        condition,
-        modifier,
-        arrayFilters,
-      }),
-    );
-  }
-
-  async updateMany(
-    condition: Criteria<TSchema>,
-    modifier: Modifier<TSchema>,
-    arrayFilters?: AnyObject[],
-  ): Promise<UpdateResult> {
-    return this.storage.resolve().then((storage) =>
-      storage.updateMany({
-        collection: this.options.name,
-        pkey: this.options.primaryKey,
-        condition,
-        modifier,
-        arrayFilters,
-      }),
-    );
-  }
-
-  async replaceOne(condition: Criteria<TSchema>, document: TSchema): Promise<UpdateResult> {
-    return this.storage.resolve().then((storage) =>
-      storage.replace({
-        collection: this.options.name,
-        pkey: this.options.primaryKey,
-        condition,
-        document,
-      }),
-    );
+    return this.storage.resolve().then((storage) => storage.update(condition, modifier, arrayFilters));
   }
 
   async remove(condition: Criteria<TSchema>): Promise<number> {
-    return this.storage
-      .resolve()
-      .then((storage) => storage.remove({ collection: this.options.name, pkey: this.options.primaryKey, condition }));
+    return this.storage.resolve().then((storage) => storage.remove(condition));
   }
 
   /*
@@ -128,28 +107,9 @@ export class Collection<
   ): Subscription;
   subscribe(condition: Criteria<TSchema> = {}, options?: QueryOptions, next?: (...args: any[]) => void): Subscription {
     if (options?.limit === 1) {
-      return this.#observeOne(condition).subscribe({ next });
+      return observeOne(this as any, condition, (values) => next?.(values as any));
     }
-    return this.#observe(condition, options).subscribe({
-      next: (value: [TSchema[], TSchema[], ChangeEvent["type"]]) => next?.(...value),
-    });
-  }
-
-  #observe(
-    filter: Criteria<TSchema> = {},
-    options?: QueryOptions,
-  ): Observable<[TSchema[], TSchema[], ChangeEvent["type"]]> {
-    return new Observable<[TSchema[], TSchema[], ChangeEvent["type"]]>((subscriber) => {
-      return observe(this as any, filter, options, (values, changed, type) =>
-        subscriber.next([values, changed, type] as any),
-      );
-    });
-  }
-
-  #observeOne(filter: Criteria<TSchema> = {}): Observable<TSchema | undefined> {
-    return new Observable<TSchema | undefined>((subscriber) => {
-      return observeOne(this as any, filter, (values) => subscriber.next(values as any));
-    });
+    return observe(this as any, condition, options, (values, changed, type) => next?.(values, changed, type));
   }
 
   /*
@@ -159,28 +119,25 @@ export class Collection<
    */
 
   /**
-   * Retrieve a record by the document 'id' key.
-   */
-  async findById(id: string): Promise<TSchema | undefined> {
-    return this.storage.resolve().then((storage) => storage.findById({ collection: this.options.name, id }));
-  }
-
-  /**
    * Performs a mingo filter search over the collection data and returns
    * a single document if one was found matching the filter and options.
    */
-  async findOne(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema | undefined> {
-    return this.find(condition, options).then(([document]) => document);
+  async findOne(condition: Criteria<TSchema> = {}, options: QueryOptions = {}): Promise<TSchema | undefined> {
+    return this.findMany(condition, { ...options, limit: 1 }).then(([document]) => document);
   }
 
   /**
    * Performs a mingo filter search over the collection data and returns any
    * documents matching the provided filter and options.
    */
-  async find(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
+  async findMany(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
     return this.storage
       .resolve()
-      .then((storage) => storage.find({ collection: this.options.name, condition, options }));
+      .then((storage) =>
+        storage
+          .find(condition, options)
+          .then((documents) => documents.map((document) => this.#schema.parse(document) as TSchema)),
+      );
   }
 
   /**
@@ -200,6 +157,20 @@ export class Collection<
       storage.flush();
     });
   }
+
+  /*
+   |--------------------------------------------------------------------------------
+   | Event Handlers
+   |--------------------------------------------------------------------------------
+   */
+
+  onFlush(cb: () => void) {
+    return this.storage.event.subscribe("flush", cb);
+  }
+
+  onChange(cb: (event: ChangeEvent<TSchema>) => void) {
+    return this.storage.event.subscribe("change", cb);
+  }
 }
 
 /*
@@ -214,7 +185,6 @@ export type SubscriptionOptions = {
   range?: QueryOptions["range"];
   offset?: QueryOptions["offset"];
   limit?: QueryOptions["limit"];
-  index?: QueryOptions["index"];
 };
 
 export type SubscribeToSingle = QueryOptions & {
@@ -225,16 +195,26 @@ export type SubscribeToMany = QueryOptions & {
   limit?: number;
 };
 
-type AnyCollectionOptions = CollectionOptions<any, any, any, any>;
+type AnyCollectionOptions = CollectionOptions<any, any, any>;
 
-type CollectionOptions<
-  TName extends string,
-  TAdapter extends Storage,
-  TPrimaryKey extends string | number | symbol,
-  TSchema extends ZodRawShape,
-> = {
+type CollectionOptions<TName extends string, TStorage extends Storage, TSchema extends ZodRawShape> = {
+  /**
+   * Name of the collection.
+   */
   name: TName;
-  adapter: TAdapter;
-  primaryKey: TPrimaryKey;
+
+  /**
+   * Storage adapter used to persist the collection documents.
+   */
+  storage: TStorage;
+
+  /**
+   * Schema definition of the document stored for the collection.
+   */
   schema: TSchema;
+
+  /**
+   * List of custom indexes for the collection.
+   */
+  indexes: Index[];
 };

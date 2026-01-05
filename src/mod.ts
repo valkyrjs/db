@@ -1,4 +1,5 @@
 export * from "./collection.ts";
-export * from "./databases/mod.ts";
-export * from "./storage/mod.ts";
-export type { Document, Filter } from "./types.ts";
+export * from "./databases/indexeddb/database.ts";
+export * from "./databases/memory/database.ts";
+export * from "./storage.ts";
+export type { AnyDocument } from "./types.ts";

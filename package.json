@@ -1,12 +1,8 @@
 {
   "dependencies": {
-    "bson": "7.0.0",
-    "dot-prop": "10.1.0",
-    "fast-equals": "6.0.0",
+    "@valkyr/event-emitter": "npm:@jsr/valkyr__event-emitter@1.0.1",
     "idb": "8.0.3",
     "mingo": "7.1.1",
-    "rfdc": "1.4.1",
-    "rxjs": "7.8.2",
     "zod": "4.3.4"
   },
   "devDependencies": {

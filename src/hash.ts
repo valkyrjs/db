@@ -1,5 +1,11 @@
-export function hashCodeQuery(filter: unknown, options: unknown): number {
-  const value = JSON.stringify({ filter, options });
+/**
+ * Generate a number from the given condition and option combination.
+ *
+ * @param condition - Condition to hash.
+ * @param options   - Options to hash.
+ */
+export function hashCodeQuery(condition: unknown, options: unknown): number {
+  const value = JSON.stringify({ condition, options });
   let hash = 0;
   if (value.length === 0) {
     return hash;

@@ -1,30 +1,18 @@
 import type { IDBPDatabase } from "idb";
 import { Query, update } from "mingo";
-import type { Criteria, Options } from "mingo/types";
-import type { CloneMode, Modifier } from "mingo/updater";
+import type { Criteria } from "mingo/types";
+import type { Modifier } from "mingo/updater";
 
-import { type DBLogger, InsertLog, QueryLog, RemoveLog, ReplaceLog, UpdateLog } from "../../logger.ts";
-import { getDocumentWithPrimaryKey } from "../../primary-key.ts";
-import { DuplicateDocumentError } from "../../storage/errors.ts";
-import {
-  getInsertManyResult,
-  getInsertOneResult,
-  type InsertManyResult,
-  type InsertOneResult,
-} from "../../storage/operators/insert.ts";
-import { RemoveResult } from "../../storage/operators/remove.ts";
-import { UpdateResult } from "../../storage/operators/update.ts";
-import { addOptions, type Index, type QueryOptions, Storage } from "../../storage/storage.ts";
-import type { Document, Filter } from "../../types.ts";
+import { type DBLogger, InsertLog, QueryLog, RemoveLog, UpdateLog } from "../../logger.ts";
+import type { Index } from "../../registrars.ts";
+import { addOptions, type QueryOptions, Storage, type UpdateResult } from "../../storage.ts";
+import type { AnyDocument } from "../../types.ts";
 import { IndexedDBCache } from "./cache.ts";
 
 const OBJECT_PROTOTYPE = Object.getPrototypeOf({});
 const OBJECT_TAG = "[object Object]";
 
-export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Document = Document> extends Storage<
-  TPrimaryKey,
-  TSchema
-> {
+export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends Storage<TSchema> {
   readonly #cache = new IndexedDBCache<TSchema>();
 
   readonly #promise: Promise<IDBPDatabase>;
@@ -33,11 +21,11 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
 
   constructor(
     name: string,
-    primaryKey: TPrimaryKey,
+    indexes: Index[],
     promise: Promise<IDBPDatabase>,
-    readonly log: DBLogger,
+    readonly log: DBLogger = function log() {},
   ) {
-    super(name, primaryKey);
+    super(name, indexes);
     this.#promise = promise;
   }
 
@@ -69,45 +57,17 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
    |--------------------------------------------------------------------------------
    */
 
-  async insertOne(values: TSchema | Omit<TSchema, TPrimaryKey>): Promise<InsertOneResult> {
+  async insert(documents: TSchema[]): Promise<void> {
     const logger = new InsertLog(this.name);
-
-    const document = getDocumentWithPrimaryKey(this.primaryKey, values);
-
-    if (await this.has(document[this.primaryKey])) {
-      throw new DuplicateDocumentError(document, this as any);
-    }
-    await this.db.transaction(this.name, "readwrite", { durability: "relaxed" }).store.add(document);
-
-    this.broadcast("insertOne", document);
-    this.#cache.flush();
-
-    this.log(logger.result());
-
-    return getInsertOneResult(document);
-  }
-
-  async insertMany(values: (TSchema | Omit<TSchema, TPrimaryKey>)[]): Promise<InsertManyResult> {
-    const logger = new InsertLog(this.name);
-
-    const documents: TSchema[] = [];
 
     const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
-    await Promise.all(
-      values.map((values) => {
-        const document = getDocumentWithPrimaryKey(this.primaryKey, values);
-        documents.push(document);
-        return tx.store.add(document);
-      }),
-    );
+    await Promise.all(documents.map((document) => tx.store.add(document)));
     await tx.done;
 
-    this.broadcast("insertMany", documents);
+    this.broadcast("insert", documents);
     this.#cache.flush();
 
     this.log(logger.result());
-
-    return getInsertManyResult(documents);
   }
 
   /*
@@ -116,28 +76,28 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
    |--------------------------------------------------------------------------------
    */
 
-  async findById(id: string): Promise<TSchema | undefined> {
-    return this.db.getFromIndex(this.name, "id", id);
+  async getByIndex(index: string, value: string): Promise<TSchema[]> {
+    return this.db.getAllFromIndex(this.name, index, value);
   }
 
-  async find(filter: Filter<TSchema>, options: QueryOptions = {}): Promise<TSchema[]> {
-    const logger = new QueryLog(this.name, { filter, options });
+  async find(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
+    const logger = new QueryLog(this.name, { condition, options });
 
-    const hashCode = this.#cache.hash(filter, options);
+    const hashCode = this.#cache.hash(condition, options);
     const cached = this.#cache.get(hashCode);
     if (cached !== undefined) {
       this.log(logger.result({ cached: true }));
       return cached;
     }
 
-    const indexes = this.#resolveIndexes(filter);
-    let cursor = new Query(filter).find<TSchema>(await this.#getAll({ ...options, ...indexes }));
+    const indexes = this.#resolveIndexes(condition);
+    let cursor = new Query(condition).find<TSchema>(await this.#getAll({ ...options, ...indexes }));
     if (options !== undefined) {
       cursor = addOptions(cursor, options);
     }
 
-    const documents = cursor.all() as TSchema[];
-    this.#cache.set(this.#cache.hash(filter, options), documents);
+    const documents = cursor.all();
+    this.#cache.set(this.#cache.hash(condition, options), documents);
 
     this.log(logger.result());
 
@@ -172,10 +132,7 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
     return {};
   }
 
-  async #getAll({ index, offset, range, limit }: QueryOptions) {
-    if (index !== undefined) {
-      return this.#getAllByIndex(index);
-    }
+  async #getAll({ offset, range, limit }: QueryOptions) {
     if (range !== undefined) {
       return this.db.getAll(this.name, IDBKeyRange.bound(range.from, range.to));
     }
@@ -183,23 +140,6 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
       return this.#getAllByOffset(offset.value, offset.direction, limit);
     }
     return this.db.getAll(this.name, undefined, limit);
-  }
-
-  async #getAllByIndex(index: Index) {
-    let result = new Set();
-    for (const key in index) {
-      const value = index[key];
-      if (Array.isArray(value)) {
-        for (const idx of value) {
-          const values = await this.db.getAllFromIndex(this.name, key, idx);
-          result = new Set([...result, ...values]);
-        }
-      } else {
-        const values = await this.db.getAllFromIndex(this.name, key, value);
-        result = new Set([...result, ...values]);
-      }
-    }
-    return Array.from(result);
   }
 
   async #getAllByOffset(value: string, direction: 1 | -1, limit?: number) {
@@ -233,33 +173,14 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
    |--------------------------------------------------------------------------------
    */
 
-  async updateOne(
-    filter: Filter<TSchema>,
+  async update(
+    condition: Criteria<TSchema>,
     modifier: Modifier<TSchema>,
-    arrayFilters?: Filter<TSchema>[],
-    condition?: Criteria<TSchema>,
-    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
+    arrayFilters?: TSchema[],
   ): Promise<UpdateResult> {
-    if (typeof filter.id === "string") {
-      return this.#update(filter.id, modifier, arrayFilters, condition, options);
-    }
-    const documents = await this.find(filter);
-    if (documents.length > 0) {
-      return this.#update(documents[0].id, modifier, arrayFilters, condition, options);
-    }
-    return new UpdateResult(0, 0);
-  }
+    const logger = new UpdateLog(this.name, { condition, modifier, arrayFilters });
 
-  async updateMany(
-    filter: Filter<TSchema>,
-    modifier: Modifier<TSchema>,
-    arrayFilters?: Filter<TSchema>[],
-    condition?: Criteria<TSchema>,
-    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
-  ): Promise<UpdateResult> {
-    const logger = new UpdateLog(this.name, { filter, modifier, arrayFilters, condition, options });
-
-    const ids = await this.find(filter).then((data) => data.map((d) => d.id));
+    const ids = await this.find(condition).then((data) => data.map((d) => d.id));
 
     const documents: TSchema[] = [];
     let modifiedCount = 0;
@@ -271,7 +192,7 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
           if (current === undefined) {
             return;
           }
-          const modified = update(current, modifier, arrayFilters, condition, options);
+          const modified = update(current, modifier, arrayFilters, condition, { cloneMode: "deep" });
           if (modified.length > 0) {
             modifiedCount += 1;
             documents.push(current);
@@ -283,71 +204,12 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
 
     await tx.done;
 
-    this.broadcast("updateMany", documents);
+    this.broadcast("update", documents);
     this.#cache.flush();
 
     this.log(logger.result());
 
-    return new UpdateResult(ids.length, modifiedCount);
-  }
-
-  async replace(filter: Filter<TSchema>, document: TSchema): Promise<UpdateResult> {
-    const logger = new ReplaceLog(this.name, document);
-
-    const ids = await this.find(filter).then((data) => data.map((d) => d.id));
-
-    const documents: TSchema[] = [];
-    const count = ids.length;
-
-    const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
-    await Promise.all(
-      ids.map((id) => {
-        const next = { ...document, id };
-        documents.push(next);
-        return tx.store.put(next);
-      }),
-    );
-    await tx.done;
-
-    this.broadcast("updateMany", documents);
-    this.#cache.flush();
-
-    this.log(logger.result({ count }));
-
-    return new UpdateResult(count, count);
-  }
-
-  async #update(
-    id: string | number,
-    modifier: Modifier<TSchema>,
-    arrayFilters?: Filter<TSchema>[],
-    condition?: Criteria<TSchema>,
-    options: { cloneMode?: CloneMode; queryOptions?: Partial<Options> } = { cloneMode: "deep" },
-  ): Promise<UpdateResult> {
-    const logger = new UpdateLog(this.name, { id, modifier });
-
-    const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
-
-    const current = await tx.store.get(id);
-    if (current === undefined) {
-      await tx.done;
-      return new UpdateResult(0, 0);
-    }
-
-    const modified = await update(current, modifier, arrayFilters, condition, options);
-    if (modified.length > 0) {
-      await tx.store.put(current);
-    }
-    await tx.done;
-
-    if (modified.length > 0) {
-      this.broadcast("updateOne", current);
-      this.log(logger.result());
-      this.#cache.flush();
-      return new UpdateResult(1, 1);
-    }
-
-    return new UpdateResult(1);
+    return { matchedCount: ids.length, modifiedCount };
   }
 
   /*
@@ -356,10 +218,10 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
    |--------------------------------------------------------------------------------
    */
 
-  async remove(filter: Filter<TSchema>): Promise<RemoveResult> {
-    const logger = new RemoveLog(this.name, { filter });
+  async remove(condition: Criteria<TSchema>): Promise<number> {
+    const logger = new RemoveLog(this.name, { condition });
 
-    const documents = await this.find(filter);
+    const documents = await this.find(condition);
     const tx = this.db.transaction(this.name, "readwrite");
 
     await Promise.all(documents.map((data) => tx.store.delete(data.id)));
@@ -370,7 +232,7 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
 
     this.log(logger.result({ count: documents.length }));
 
-    return new RemoveResult(documents.length);
+    return documents.length;
   }
 
   /*
@@ -379,9 +241,9 @@ export class IndexedDBStorage<TPrimaryKey extends string, TSchema extends Docume
    |--------------------------------------------------------------------------------
    */
 
-  async count(filter?: Filter<TSchema>): Promise<number> {
-    if (filter !== undefined) {
-      return (await this.find(filter)).length;
+  async count(condition: Criteria<TSchema>): Promise<number> {
+    if (condition !== undefined) {
+      return (await this.find(condition)).length;
     }
     return this.db.count(this.name);
   }

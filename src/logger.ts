@@ -40,10 +40,6 @@ export class UpdateLog extends LogEvent implements DBLogEvent {
   readonly type = "update" as const;
 }
 
-export class ReplaceLog extends LogEvent implements DBLogEvent {
-  readonly type = "replace" as const;
-}
-
 export class RemoveLog extends LogEvent implements DBLogEvent {
   readonly type = "remove" as const;
 }
@@ -67,4 +63,4 @@ export type DBLogEvent = {
   message?: string;
 };
 
-type DBLogEventType = InsertLog["type"] | UpdateLog["type"] | ReplaceLog["type"] | RemoveLog["type"] | QueryLog["type"];
+type DBLogEventType = InsertLog["type"] | UpdateLog["type"] | RemoveLog["type"] | QueryLog["type"];

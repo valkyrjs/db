@@ -1,7 +1,4 @@
-import { clone } from "../src/clone.ts";
-import type { WithId } from "../src/types.ts";
-
-const users: WithId<UserDocument>[] = [
+const users: UserDocument[] = [
   {
     id: "user-1",
     name: "John Doe",
@@ -28,11 +25,12 @@ const users: WithId<UserDocument>[] = [
   },
 ];
 
-export function getUsers(): WithId<UserDocument>[] {
-  return clone(users);
+export function getUsers(): UserDocument[] {
+  return JSON.parse(JSON.stringify(users));
 }
 
 export type UserDocument = {
+  id: string;
   name: string;
   email: string;
   friends: Friend[];

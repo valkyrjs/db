@@ -1,13 +1,15 @@
-import { hashCodeQuery } from "../../hash.ts";
-import type { QueryOptions } from "../../storage/mod.ts";
-import type { Document, Filter } from "../../types.ts";
+import type { Criteria } from "mingo/types";
 
-export class IndexedDBCache<TSchema extends Document = Document> {
+import { hashCodeQuery } from "../../hash.ts";
+import type { QueryOptions } from "../../storage.ts";
+import type { AnyDocument } from "../../types.ts";
+
+export class IndexedDBCache<TSchema extends AnyDocument = AnyDocument> {
   readonly #cache = new Map<number, string[]>();
   readonly #documents = new Map<string, TSchema>();
 
-  hash(filter: Filter<TSchema>, options: QueryOptions): number {
-    return hashCodeQuery(filter, options);
+  hash(condition: Criteria<TSchema>, options: QueryOptions = {}): number {
+    return hashCodeQuery(condition, options);
   }
 
   set(hashCode: number, documents: TSchema[]) {
@@ -23,7 +25,7 @@ export class IndexedDBCache<TSchema extends Document = Document> {
   get(hashCode: number): TSchema[] | undefined {
     const ids = this.#cache.get(hashCode);
     if (ids !== undefined) {
-      return ids.map((id) => this.#documents.get(id) as TSchema);
+      return ids.map((id) => this.#documents.get(id)).filter((document) => document !== undefined);
     }
   }
 

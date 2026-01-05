@@ -1,4 +1,4 @@
-import type { AnyObject } from "mingo/types";
+import type { AnyDocument } from "./types.ts";
 
 export const BroadcastChannel =
   globalThis.BroadcastChannel ??
@@ -11,13 +11,8 @@ export const BroadcastChannel =
 export type StorageBroadcast =
   | {
       name: string;
-      type: "insertOne" | "updateOne";
-      data: AnyObject;
-    }
-  | {
-      name: string;
-      type: "insertMany" | "updateMany" | "remove";
-      data: AnyObject[];
+      type: "insert" | "update" | "remove";
+      data: AnyDocument[];
     }
   | {
       name: string;
