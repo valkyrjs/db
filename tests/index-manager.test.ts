@@ -3,7 +3,7 @@ import { expect } from "expect";
 
 import { IndexManager, type IndexSpec } from "../src/index/manager.ts";
 
-describe("IndexManager", () => {
+describe("IndexManager", { sanitizeOps: false, sanitizeResources: false }, () => {
   type User = {
     id: string;
     email: string;

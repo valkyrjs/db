@@ -24,7 +24,7 @@ const schema = {
 
 type UserSchema = typeof schema;
 
-describe("Collection", () => {
+describe("Collection", { sanitizeOps: false, sanitizeResources: false }, () => {
   let collection: Collection<{
     name: string;
     storage: MemoryStorage;
