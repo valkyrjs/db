@@ -13,7 +13,7 @@ export function observe<TCollection extends Collection>(
   options: QueryOptions | undefined,
   onChange: (documents: AnyDocument[], changed: AnyDocument[], type: ChangeEvent["type"]) => void,
 ): Subscription {
-  const documents = new Map<string | number, AnyDocument>();
+  const cache = new Map<string, AnyDocument>();
 
   let debounce: any;
 
@@ -21,6 +21,9 @@ export function observe<TCollection extends Collection>(
   // Find the initial documents and send them to the change listener.
 
   collection.findMany(condition, options).then(async (documents) => {
+    for (const document of documents) {
+      cache.set(collection.getPrimaryKeyValue(document), document);
+    }
     onChange(documents, documents, "insert");
   });
 
@@ -37,7 +40,7 @@ export function observe<TCollection extends Collection>(
         case "insert": {
           for (const document of data) {
             if (isMatch(document, condition)) {
-              documents.set(collection.getPrimaryKeyValue(document), document);
+              cache.set(collection.getPrimaryKeyValue(document), document);
               changed.push(document);
             }
           }
@@ -46,15 +49,15 @@ export function observe<TCollection extends Collection>(
         case "update": {
           for (const document of data) {
             const id = collection.getPrimaryKeyValue(document);
-            if (documents.has(id)) {
+            if (cache.has(id)) {
               if (isMatch(document, condition)) {
-                documents.set(id, document);
+                cache.set(id, document);
               } else {
-                documents.delete(id);
+                cache.delete(id);
               }
               changed.push(document);
             } else if (isMatch(document, condition)) {
-              documents.set(id, document);
+              cache.set(id, document);
               changed.push(document);
             }
           }
@@ -63,7 +66,7 @@ export function observe<TCollection extends Collection>(
         case "remove": {
           for (const document of data) {
             if (isMatch(document, condition)) {
-              documents.delete(collection.getPrimaryKeyValue(document));
+              cache.delete(collection.getPrimaryKeyValue(document));
               changed.push(document);
             }
           }
@@ -73,7 +76,7 @@ export function observe<TCollection extends Collection>(
       if (changed.length > 0) {
         clearTimeout(debounce);
         debounce = setTimeout(() => {
-          onChange(applyQueryOptions(Array.from(documents.values()), options), changed, type);
+          onChange(applyQueryOptions(Array.from(cache.values()), options), changed, type);
         }, 0);
       }
     }),

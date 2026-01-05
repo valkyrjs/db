@@ -7,11 +7,11 @@
     "npm:@jsr/std__testing@1": "1.0.16",
     "npm:@jsr/valkyr__event-emitter@1.0.1": "1.0.1",
     "npm:@jsr/valkyr__testcontainers@2": "2.0.2",
+    "npm:@types/node@*": "24.2.0",
     "npm:expect@30.2.0": "30.2.0",
     "npm:fake-indexeddb@6.2.5": "6.2.5",
     "npm:idb@8.0.3": "8.0.3",
     "npm:mingo@7.1.1": "7.1.1",
-    "npm:sorted-btree@2.1.0": "2.1.0",
     "npm:zod@4.3.4": "4.3.4"
   },
   "npm": {
@@ -428,9 +428,6 @@
     "slash@3.0.0": {
       "integrity": "sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q=="
     },
-    "sorted-btree@2.1.0": {
-      "integrity": "sha512-AtYXy3lL+5jrATpbymC2bM8anN/3maLkmVCd94MzypnKjokfCid/zeS3rvXedv7W6ffSfqKIGdz3UaJPWRBZ0g=="
-    },
     "sparse-bitfield@3.0.3": {
       "integrity": "sha512-kvzhi7vqKTfkh0PZU+2D2PIllw2ymqJKujUcyPMd9Y75Nv4nPbGJZXNhxsgdQab2BmlDct1YnfQCguEvHr7VsQ==",
       "dependencies": [
@@ -491,7 +488,6 @@
         "npm:fake-indexeddb@6.2.5",
         "npm:idb@8.0.3",
         "npm:mingo@7.1.1",
-        "npm:sorted-btree@2.1.0",
         "npm:zod@4.3.4"
       ]
     }

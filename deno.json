@@ -1,6 +1,6 @@
 {
   "name": "@valkyr/db",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "exports": {
     ".": "./src/mod.ts"
   },
@@ -24,7 +24,7 @@
     },
 
     "test": {
-      "command": "deno test --allow-all ./src",
+      "command": "deno test --allow-all",
       "description": "Run all tests using Deno’s built-in test runner."
     },
 

@@ -1,5 +1,7 @@
 import type { PrimaryKey } from "./primary.ts";
 
+const EMPTY_SET: ReadonlySet<PrimaryKey> = Object.freeze(new Set<PrimaryKey>());
+
 export class SharedIndex {
   readonly #index = new Map<string, Set<PrimaryKey>>();
 
@@ -23,8 +25,8 @@ export class SharedIndex {
    *
    * @param value - Value to lookup a primary key for.
    */
-  lookup(value: any): Set<PrimaryKey> {
-    return this.#index.get(value) ?? new Set();
+  lookup(value: any): ReadonlySet<PrimaryKey> {
+    return this.#index.get(value) ?? EMPTY_SET;
   }
 
   /**

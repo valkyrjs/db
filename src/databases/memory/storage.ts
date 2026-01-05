@@ -5,18 +5,18 @@ import type { Modifier } from "mingo/updater";
 import { IndexManager, type IndexSpec } from "../../index/manager.ts";
 import type { UpdateResult } from "../../storage.ts";
 import { addOptions, type QueryOptions, Storage } from "../../storage.ts";
-import type { AnyDocument } from "../../types.ts";
+import type { AnyDocument, StringKeyOf } from "../../types.ts";
 
 export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends Storage<TSchema> {
   readonly index: IndexManager<TSchema>;
 
-  constructor(name: string, indexes: IndexSpec[]) {
+  constructor(name: string, indexes: IndexSpec<TSchema>[]) {
     super(name, indexes);
     this.index = new IndexManager(indexes);
   }
 
   get documents() {
-    return this.index.primary.tree;
+    return this.index.primary.documents;
   }
 
   async resolve() {
@@ -30,14 +30,14 @@ export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends St
     this.broadcast("insert", documents);
   }
 
-  async getByIndex(index: string, value: string): Promise<TSchema[]> {
-    return this.index.get(index)?.get(value) ?? [];
+  async getByIndex(field: StringKeyOf<TSchema>, value: string): Promise<TSchema[]> {
+    return this.index.getByIndex(field, value);
   }
 
   async find(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
-    let cursor = new Query(condition).find<TSchema>(this.documents);
+    const cursor = new Query(condition).find<TSchema>(this.documents);
     if (options !== undefined) {
-      cursor = addOptions(cursor, options);
+      return addOptions(cursor, options).all();
     }
     return cursor.all();
   }
@@ -58,7 +58,7 @@ export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends St
       if (modified.length > 0) {
         modifiedCount += 1;
         documents.push(document);
-        this.documents.add(document);
+        this.index.update(document);
       }
     }
 
@@ -72,7 +72,7 @@ export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends St
   async remove(condition: Criteria<TSchema>): Promise<number> {
     const documents = await this.find(condition);
     for (const document of documents) {
-      this.documents.delete(document);
+      this.index.remove(document);
     }
     this.broadcast("remove", documents);
     return documents.length;
@@ -83,6 +83,6 @@ export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends St
   }
 
   async flush(): Promise<void> {
-    this.documents.clear();
+    this.index.flush();
   }
 }

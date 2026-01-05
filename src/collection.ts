@@ -4,10 +4,10 @@ import type { Modifier } from "mingo/updater";
 import type { ZodObject, ZodRawShape } from "zod";
 import z from "zod";
 
+import type { IndexSpec } from "./index/manager.ts";
 import { observe, observeOne } from "./observe/mod.ts";
-import type { Index } from "./registrars.ts";
 import type { ChangeEvent, QueryOptions, Storage, UpdateResult } from "./storage.ts";
-import type { AnyDocument } from "./types.ts";
+import type { AnyDocument, QueryCriteria } from "./types.ts";
 
 /*
  |--------------------------------------------------------------------------------
@@ -44,8 +44,8 @@ export class Collection<
 
   get primaryKey(): string {
     for (const index of this.options.indexes ?? []) {
-      if (index[1]?.primary === true) {
-        return index[0] as string;
+      if (index.kind === "primary") {
+        return index.field;
       }
     }
     throw new Error(`Collection '${this.name}' is missing required primary key assignment.`);
@@ -57,7 +57,7 @@ export class Collection<
  |--------------------------------------------------------------------------------
  */
 
-  getPrimaryKeyValue(document: AnyDocument): string | number {
+  getPrimaryKeyValue(document: AnyDocument): string {
     const id = document[this.#pkey];
     if (id === undefined || typeof id !== "string") {
       throw new Error(
@@ -74,7 +74,9 @@ export class Collection<
    */
 
   async insert(documents: TSchema[]): Promise<void> {
-    return this.storage.resolve().then((storage) => storage.insert(documents));
+    return this.storage
+      .resolve()
+      .then((storage) => storage.insert(documents.map((document) => this.#schema.parse(document))));
   }
 
   async update(
@@ -122,7 +124,7 @@ export class Collection<
    * Performs a mingo filter search over the collection data and returns
    * a single document if one was found matching the filter and options.
    */
-  async findOne(condition: Criteria<TSchema> = {}, options: QueryOptions = {}): Promise<TSchema | undefined> {
+  async findOne(condition: QueryCriteria<TSchema> = {}, options: QueryOptions = {}): Promise<TSchema | undefined> {
     return this.findMany(condition, { ...options, limit: 1 }).then(([document]) => document);
   }
 
@@ -130,7 +132,7 @@ export class Collection<
    * Performs a mingo filter search over the collection data and returns any
    * documents matching the provided filter and options.
    */
-  async findMany(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
+  async findMany(condition: QueryCriteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
     return this.storage
       .resolve()
       .then((storage) =>
@@ -144,17 +146,17 @@ export class Collection<
    * Performs a mingo filter search over the collection data and returns
    * the count of all documents found matching the filter and options.
    */
-  async count(condition?: Criteria<TSchema>): Promise<number> {
-    return this.storage.resolve().then((storage) => storage.count({ collection: this.options.name, condition }));
+  async count(condition: Criteria<TSchema> = {}): Promise<number> {
+    return this.storage.resolve().then((storage) => storage.count(condition));
   }
 
   /**
    * Removes all documents from the storage instance.
    */
-  flush(): void {
-    this.storage.resolve().then((storage) => {
+  async flush(): Promise<void> {
+    await this.storage.resolve().then(async (storage) => {
+      await storage.flush();
       storage.broadcast("flush");
-      storage.flush();
     });
   }
 
@@ -216,5 +218,5 @@ type CollectionOptions<TName extends string, TStorage extends Storage, TSchema e
   /**
    * List of custom indexes for the collection.
    */
-  indexes: Index[];
+  indexes: IndexSpec<TSchema>[];
 };

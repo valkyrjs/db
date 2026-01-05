@@ -1,5 +1,6 @@
 import { Collection } from "../../collection.ts";
-import type { Index, Registrars } from "../../registrars.ts";
+import type { IndexSpec } from "../../index/manager.ts";
+import type { Registrars } from "../../registrars.ts";
 import { MemoryStorage } from "./storage.ts";
 
 export class MemoryDatabase<TOptions extends MemoryDatabaseOptions> {
@@ -42,7 +43,7 @@ export class MemoryDatabase<TOptions extends MemoryDatabaseOptions> {
     name: TName;
     storage: MemoryStorage;
     schema: TSchema;
-    indexes: Index[];
+    indexes: IndexSpec<any>[];
   }> {
     const collection = this.#collections.get(name);
     if (collection === undefined) {

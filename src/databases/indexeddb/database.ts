@@ -1,8 +1,9 @@
 import { type IDBPDatabase, openDB } from "idb";
 
 import { Collection } from "../../collection.ts";
+import type { IndexSpec } from "../../index/manager.ts";
 import type { DBLogger } from "../../logger.ts";
-import type { Index, Registrars } from "../../registrars.ts";
+import type { Registrars } from "../../registrars.ts";
 import { IndexedDBStorage } from "./storage.ts";
 
 export class IndexedDB<TOptions extends IndexedDBOptions> {
@@ -12,10 +13,22 @@ export class IndexedDB<TOptions extends IndexedDBOptions> {
   constructor(readonly options: TOptions) {
     this.#db = openDB(options.name, options.version ?? 1, {
       upgrade: (db: IDBPDatabase) => {
-        for (const { name, indexes = [] } of options.registrars) {
-          const store = db.createObjectStore(name);
-          for (const [keyPath, options] of indexes) {
-            store.createIndex(keyPath, keyPath, options);
+        for (const { name, indexes } of options.registrars) {
+          const store = db.createObjectStore(name, {
+            keyPath: indexes.find((index: IndexSpec<any>) => index.kind === "primary")?.field,
+          });
+          for (const { field, kind } of indexes) {
+            switch (kind) {
+              case "primary":
+              case "unique": {
+                store.createIndex(field, field, { unique: true });
+                break;
+              }
+              case "shared": {
+                store.createIndex(field, field);
+                break;
+              }
+            }
           }
         }
       },
@@ -48,7 +61,7 @@ export class IndexedDB<TOptions extends IndexedDBOptions> {
     name: TName;
     storage: IndexedDBStorage;
     schema: TSchema;
-    indexes: Index[];
+    indexes: IndexSpec<any>[];
   }> {
     const collection = this.#collections.get(name);
     if (collection === undefined) {
@@ -73,8 +86,8 @@ export class IndexedDB<TOptions extends IndexedDBOptions> {
     }
   }
 
-  close() {
-    this.#db.then((db) => db.close());
+  async close() {
+    await this.#db.then((db) => db.close());
   }
 }
 

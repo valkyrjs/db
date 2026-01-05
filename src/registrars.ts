@@ -1,6 +1,9 @@
+import type { AnyDocument } from "@valkyr/db";
 import type { ZodRawShape } from "zod";
 
-export type Registrars<TSchema extends ZodRawShape = ZodRawShape> = {
+import type { IndexSpec } from "./index/manager.ts";
+
+export type Registrars<TSchema extends AnyDocument = ZodRawShape> = {
   /**
    * Name of the collection.
    */
@@ -14,5 +17,5 @@ export type Registrars<TSchema extends ZodRawShape = ZodRawShape> = {
   /**
    * List of custom indexes for the collection.
    */
-  indexes: IndexSpec[];
+  indexes: IndexSpec<TSchema>[];
 };

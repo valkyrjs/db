@@ -3,8 +3,8 @@ import { Query, update } from "mingo";
 import type { Criteria } from "mingo/types";
 import type { Modifier } from "mingo/updater";
 
+import type { IndexSpec } from "../../index/manager.ts";
 import { type DBLogger, InsertLog, QueryLog, RemoveLog, UpdateLog } from "../../logger.ts";
-import type { Index } from "../../registrars.ts";
 import { addOptions, type QueryOptions, Storage, type UpdateResult } from "../../storage.ts";
 import type { AnyDocument } from "../../types.ts";
 import { IndexedDBCache } from "./cache.ts";
@@ -21,7 +21,7 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
 
   constructor(
     name: string,
-    indexes: Index[],
+    indexes: IndexSpec<TSchema>[],
     promise: Promise<IDBPDatabase>,
     readonly log: DBLogger = function log() {},
   ) {
@@ -29,26 +29,18 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     this.#promise = promise;
   }
 
-  async resolve() {
-    if (this.#db === undefined) {
-      this.#db = await this.#promise;
-    }
-    return this;
-  }
-
-  async has(id: string): Promise<boolean> {
-    const document = await this.db.getFromIndex(this.name, "id", id);
-    if (document !== undefined) {
-      return true;
-    }
-    return false;
-  }
-
   get db() {
     if (this.#db === undefined) {
       throw new Error("Database not initialized");
     }
     return this.#db;
+  }
+
+  async resolve() {
+    if (this.#db === undefined) {
+      this.#db = await this.#promise;
+    }
+    return this;
   }
 
   /*

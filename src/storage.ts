@@ -4,7 +4,7 @@ import type { Criteria } from "mingo/types";
 import type { Modifier } from "mingo/updater";
 
 import { BroadcastChannel, type StorageBroadcast } from "./broadcast.ts";
-import type { Index } from "./registrars.ts";
+import type { IndexSpec } from "./index/manager.ts";
 import type { AnyDocument } from "./types.ts";
 
 type StorageEvent = "change" | "flush";
@@ -25,10 +25,10 @@ export abstract class Storage<TSchema extends AnyDocument = AnyDocument> {
     /**
      * List of indexes to optimize storage lookups.
      */
-    readonly indexes: Index[],
+    readonly indexes: IndexSpec<TSchema>[],
   ) {
     if (primaryIndexCount(indexes) !== 1) {
-      throw new Error("Storage is missing or has more than 1 defined primaryIndex");
+      throw new Error("missing required primary key assignment");
     }
     this.#channel = new BroadcastChannel(`@valkyr/db:${name}`);
     this.#channel.onmessage = ({ data }: MessageEvent<StorageBroadcast>) => {
@@ -174,7 +174,7 @@ export function addOptions<TSchema extends AnyDocument = AnyDocument>(
   cursor: Cursor<TSchema>,
   options: QueryOptions,
 ): Cursor<TSchema> {
-  if (options.sort) {
+  if (options.sort !== undefined) {
     cursor.sort(options.sort);
   }
   if (options.skip !== undefined) {
@@ -186,10 +186,10 @@ export function addOptions<TSchema extends AnyDocument = AnyDocument>(
   return cursor;
 }
 
-function primaryIndexCount(indexes: Index[]): number {
+function primaryIndexCount<TSchema extends AnyDocument = AnyDocument>(indexes: IndexSpec<TSchema>[]): number {
   let count = 0;
-  for (const [, options] of indexes) {
-    if (options?.primary === true) {
+  for (const { kind } of indexes) {
+    if (kind === "primary") {
       count += 1;
     }
   }
