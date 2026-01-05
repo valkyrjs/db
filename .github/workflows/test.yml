@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -23,7 +23,7 @@ jobs:
           node-version: 20
 
       - run: deno install
-      - run: deno task lint
+      - run: deno task check
 
   test:
     runs-on: ubuntu-latest
