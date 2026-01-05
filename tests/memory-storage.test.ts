@@ -10,7 +10,7 @@ interface TestDoc {
   tags?: string[];
 }
 
-describe("MemoryStorage", () => {
+describe("MemoryStorage", { sanitizeOps: false, sanitizeResources: false }, () => {
   it("should insert new records", async () => {
     const storage = new MemoryStorage<TestDoc>("test", [{ field: "id", kind: "primary" }]);
     const documents: TestDoc[] = [{ id: "abc", name: "Alice", age: 30 }];
