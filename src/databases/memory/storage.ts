@@ -15,11 +15,11 @@ export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends St
     this.index = new IndexManager(indexes);
   }
 
-  get documents() {
+  get documents(): TSchema[] {
     return this.index.primary.documents;
   }
 
-  async resolve() {
+  async resolve(): Promise<this> {
     return this;
   }
 

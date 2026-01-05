@@ -29,14 +29,14 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     this.#promise = promise;
   }
 
-  get db() {
+  get db(): IDBPDatabase {
     if (this.#db === undefined) {
       throw new Error("Database not initialized");
     }
     return this.#db;
   }
 
-  async resolve() {
+  async resolve(): Promise<this> {
     if (this.#db === undefined) {
       this.#db = await this.#promise;
     }

@@ -10,8 +10,8 @@ const EMPTY_SET: ReadonlySet<PrimaryKey> = Object.freeze(new Set<PrimaryKey>());
 export class IndexManager<TSchema extends AnyDocument> {
   readonly primary: PrimaryIndex<TSchema>;
 
-  readonly unique = new Map<StringKeyOf<TSchema>, UniqueIndex>();
-  readonly shared = new Map<StringKeyOf<TSchema>, SharedIndex>();
+  readonly unique: Map<StringKeyOf<TSchema>, UniqueIndex> = new Map<StringKeyOf<TSchema>, UniqueIndex>();
+  readonly shared: Map<StringKeyOf<TSchema>, SharedIndex> = new Map<StringKeyOf<TSchema>, SharedIndex>();
 
   constructor(readonly specs: IndexSpec<TSchema>[]) {
     const primary = specs.find((spec) => spec.kind === "primary");
@@ -40,7 +40,7 @@ export class IndexManager<TSchema extends AnyDocument> {
    *
    * @param document - Document to insert.
    */
-  insert(document: TSchema) {
+  insert(document: TSchema): void {
     const pk = document[this.primary.key];
 
     const insertedUniques: [StringKeyOf<TSchema>, any][] = [];
@@ -225,12 +225,13 @@ export class IndexManager<TSchema extends AnyDocument> {
    *
    * @param document - Document to update against current index.
    */
-  update(document: TSchema) {
+  update(document: TSchema): void {
     const pk = document[this.primary.key];
     const current = this.primary.get(pk);
 
     if (current === undefined) {
-      return this.insert(document);
+      this.insert(document);
+      return;
     }
 
     const revertedUniques: [StringKeyOf<TSchema>, any][] = [];

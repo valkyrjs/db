@@ -10,7 +10,7 @@ import type { AnyDocument } from "./types.ts";
 type StorageEvent = "change" | "flush";
 
 export abstract class Storage<TSchema extends AnyDocument = AnyDocument> {
-  readonly event = new EventEmitter<StorageEvent>();
+  readonly event: EventEmitter<StorageEvent> = new EventEmitter<StorageEvent>();
 
   status: Status = "loading";
 

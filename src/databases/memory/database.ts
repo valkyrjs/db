@@ -20,11 +20,11 @@ export class MemoryDatabase<TOptions extends MemoryDatabaseOptions> {
     }
   }
 
-  get name() {
+  get name(): TOptions["name"] {
     return this.options.name;
   }
 
-  get registrars() {
+  get registrars(): TOptions["registrars"] {
     return this.options.registrars;
   }
 

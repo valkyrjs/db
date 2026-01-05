@@ -166,11 +166,11 @@ export class Collection<
    |--------------------------------------------------------------------------------
    */
 
-  onFlush(cb: () => void) {
+  onFlush(cb: () => void): Subscription {
     return this.storage.event.subscribe("flush", cb);
   }
 
-  onChange(cb: (event: ChangeEvent<TSchema>) => void) {
+  onChange(cb: (event: ChangeEvent<TSchema>) => void): Subscription {
     return this.storage.event.subscribe("change", cb);
   }
 }

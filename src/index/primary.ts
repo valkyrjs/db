@@ -7,11 +7,11 @@ export class PrimaryIndex<TSchema extends AnyDocument> {
 
   constructor(readonly key: string) {}
 
-  get documents() {
+  get documents(): TSchema[] {
     return Array.from(this.#index.values());
   }
 
-  keys() {
+  keys(): string[] {
     return Array.from(this.#index.keys());
   }
 
@@ -19,7 +19,7 @@ export class PrimaryIndex<TSchema extends AnyDocument> {
     return this.#index.has(pk);
   }
 
-  insert(pk: PrimaryKey, document: TSchema) {
+  insert(pk: PrimaryKey, document: TSchema): void {
     if (this.#index.has(pk)) {
       throw new Error(`Duplicate primary key: ${pk}`);
     }
@@ -30,15 +30,15 @@ export class PrimaryIndex<TSchema extends AnyDocument> {
     return this.#index.get(pk);
   }
 
-  replace(pk: PrimaryKey, document: TSchema) {
+  replace(pk: PrimaryKey, document: TSchema): void {
     this.#index.set(pk, document);
   }
 
-  delete(pk: PrimaryKey) {
+  delete(pk: PrimaryKey): void {
     this.#index.delete(pk);
   }
 
-  flush() {
+  flush(): void {
     this.#index.clear();
   }
 }
