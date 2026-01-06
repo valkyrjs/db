@@ -13,19 +13,23 @@ const OBJECT_PROTOTYPE = Object.getPrototypeOf({});
 const OBJECT_TAG = "[object Object]";
 
 export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends Storage<TSchema> {
+  readonly pkey: string;
+  readonly log: DBLogger;
+
   readonly #cache = new IndexedDBCache<TSchema>();
 
   readonly #promise: Promise<IDBPDatabase>;
 
   #db?: IDBPDatabase;
 
-  constructor(
-    name: string,
-    indexes: IndexSpec<TSchema>[],
-    promise: Promise<IDBPDatabase>,
-    readonly log: DBLogger = function log() {},
-  ) {
+  constructor(name: string, indexes: IndexSpec<TSchema>[], promise: Promise<IDBPDatabase>, log?: DBLogger) {
     super(name, indexes);
+    const index = this.indexes.find((index) => index.kind === "primary");
+    if (index === undefined) {
+      throw new Error("missing required primary key index");
+    }
+    this.pkey = index.field;
+    this.log = log ?? function log() {};
     this.#promise = promise;
   }
 
@@ -45,6 +49,60 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
 
   /*
    |--------------------------------------------------------------------------------
+   | Indexes
+   |--------------------------------------------------------------------------------
+   */
+
+  #isPrimaryIndex(key: string): boolean {
+    for (const { field, kind } of this.indexes) {
+      if (key === field && kind === "primary") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #isUniqueIndex(key: string): boolean {
+    for (const { field, kind } of this.indexes) {
+      if (key === field && kind === "unique") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #isSharedIndex(key: string): boolean {
+    for (const { field, kind } of this.indexes) {
+      if (key === field && kind === "shared") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #getOptimalIndex(keys: string[]): string {
+    let best: string | undefined;
+
+    for (const key of keys) {
+      if (this.#isPrimaryIndex(key)) {
+        return key; // cannot beat primary
+      }
+
+      if (this.#isUniqueIndex(key)) {
+        best ??= key;
+        continue;
+      }
+
+      if (best === undefined && this.#isSharedIndex(key)) {
+        best = key;
+      }
+    }
+
+    return best ?? keys[0];
+  }
+
+  /*
+   |--------------------------------------------------------------------------------
    | Insert
    |--------------------------------------------------------------------------------
    */
@@ -53,7 +111,16 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     const logger = new InsertLog(this.name);
 
     const tx = this.db.transaction(this.name, "readwrite", { durability: "relaxed" });
-    await Promise.all(documents.map((document) => tx.store.add(document)));
+
+    await Promise.all(
+      documents.map(async (document) => {
+        const existing = await tx.store.get(document[this.pkey]); // Assuming 'id' is your key
+        if (existing === undefined) {
+          await tx.store.add(document);
+        }
+      }),
+    );
+
     await tx.done;
 
     this.broadcast("insert", documents);
@@ -83,13 +150,14 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     }
 
     const indexes = this.#resolveIndexes(condition);
-    let cursor = new Query(condition).find<TSchema>(await this.#getAll({ ...options, ...indexes }));
+
+    let cursor = new Query(condition).find<TSchema>(await this.#getAll({ ...options }, indexes));
     if (options !== undefined) {
       cursor = addOptions(cursor, options);
     }
 
     const documents = cursor.all();
-    this.#cache.set(this.#cache.hash(condition, options), documents);
+    this.#cache.set(hashCode, documents);
 
     this.log(logger.result());
 
@@ -100,7 +168,7 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
    * TODO: Prototype! Needs to cover more mongodb query cases and investigation around
    * nested indexing in indexeddb.
    */
-  #resolveIndexes(filter: any): { index?: { [key: string]: any } } {
+  #resolveIndexes(filter: any): { [key: string]: any } | undefined {
     const indexNames = this.db.transaction(this.name, "readonly").store.indexNames;
     const index: { [key: string]: any } = {};
     for (const key in filter) {
@@ -119,19 +187,74 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
       }
     }
     if (Object.keys(index).length > 0) {
-      return { index };
+      return index;
     }
-    return {};
   }
 
-  async #getAll({ offset, range, limit }: QueryOptions) {
-    if (range !== undefined) {
-      return this.db.getAll(this.name, IDBKeyRange.bound(range.from, range.to));
+  async #getAll(
+    { offset, range, limit }: QueryOptions,
+    indexes?: { [key: string]: IDBKeyRange | undefined },
+  ): Promise<TSchema[]> {
+    const tx = this.db.transaction(this.name, "readonly");
+
+    const store = tx.objectStore(this.name);
+
+    // ### Indexed
+    // Fetch all records by optimal index
+
+    if (indexes) {
+      const indexName = this.#getOptimalIndex(Object.keys(indexes));
+      const index = store.index(indexName);
+
+      const key = indexes[indexName];
+
+      const results: TSchema[] = [];
+
+      // Handle $in
+
+      if (Array.isArray(key)) {
+        for (const value of key) {
+          const records = await index.getAll(value);
+          results.push(...records);
+        }
+
+        // Deduplicate (required for $in)
+
+        const unique = new Map<any, TSchema>();
+        for (const doc of results) {
+          unique.set(this.pkey, doc); // adjust PK if needed
+        }
+
+        await tx.done;
+        return [...unique.values()];
+      }
+
+      // Single-key lookup
+
+      const records = await index.getAll(key);
+
+      await tx.done;
+      return records;
     }
-    if (offset !== undefined) {
+
+    // ### Range
+    // Fetch records in a given range.
+
+    if (range) {
+      return store.getAll(IDBKeyRange.bound(range.from, range.to), limit);
+    }
+
+    // ### Offset
+    // Offset-based query (cursor-based)
+
+    if (offset) {
       return this.#getAllByOffset(offset.value, offset.direction, limit);
     }
-    return this.db.getAll(this.name, undefined, limit);
+
+    // ### Default
+    // Fetch all records
+
+    return store.getAll(undefined, limit);
   }
 
   async #getAllByOffset(value: string, direction: 1 | -1, limit?: number) {
