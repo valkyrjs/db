@@ -29,7 +29,17 @@ describe("Collection", { sanitizeOps: false, sanitizeResources: false }, () => {
     name: string;
     storage: MemoryStorage;
     schema: UserSchema;
-    indexes: [{ field: "id"; kind: "primary" }];
+    indexes: [
+      { field: "id"; kind: "primary" },
+      {
+        field: "emails";
+        kind: "unique";
+      },
+      {
+        field: "name";
+        kind: "shared";
+      },
+    ];
   }>;
 
   beforeEach(() => {
@@ -40,24 +50,28 @@ describe("Collection", { sanitizeOps: false, sanitizeResources: false }, () => {
           field: "id",
           kind: "primary",
         },
+        {
+          field: "emails",
+          kind: "unique",
+        },
+        {
+          field: "name",
+          kind: "shared",
+        },
       ]),
-      schema: {
-        id: z.string(),
-        name: z.string().optional(),
-        fullName: z.string().optional(),
-        emails: z.array(z.email()),
-        friends: z.array(
-          z.object({
-            id: z.string(),
-            type: z.union([z.literal("family"), z.literal("close")]),
-          }),
-        ),
-        age: z.number(),
-      },
+      schema,
       indexes: [
         {
           field: "id",
           kind: "primary",
+        },
+        {
+          field: "emails",
+          kind: "unique",
+        },
+        {
+          field: "name",
+          kind: "shared",
         },
       ],
     });
@@ -237,6 +251,18 @@ describe("Collection", { sanitizeOps: false, sanitizeResources: false }, () => {
         const docs = await collection.findMany({ age: { $gte: 30 } });
         expect(docs).toHaveLength(2);
         expect(docs.every((d) => d.age >= 30)).toBe(true);
+      });
+
+      it("should find documents by indexed condition", async () => {
+        const docs = await collection.findMany({ name: "Bob" });
+        expect(docs).toHaveLength(1);
+        expect(docs[0].name).toBe("Bob");
+      });
+
+      it("should find documents by nested indexed condition", async () => {
+        const docs = await collection.findMany({ emails: { $in: ["charlie@test.com"] } });
+        expect(docs).toHaveLength(1);
+        expect(docs[0].emails[0]).toBe("charlie@test.com");
       });
 
       it("should support limit option", async () => {

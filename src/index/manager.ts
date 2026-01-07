@@ -1,10 +1,14 @@
+import { Query } from "mingo";
+import type { Cursor } from "mingo/cursor";
 import type { Criteria } from "mingo/types";
 
-import type { AnyDocument, StringKeyOf } from "../types.ts";
+import type { AnyDocument, QueryCriteria, StringKeyOf } from "../types.ts";
 import { PrimaryIndex, type PrimaryKey } from "./primary.ts";
 import { SharedIndex } from "./shared.ts";
 import { UniqueIndex } from "./unique.ts";
 
+const OBJECT_PROTOTYPE = Object.getPrototypeOf({});
+const OBJECT_TAG = "[object Object]";
 const EMPTY_SET: ReadonlySet<PrimaryKey> = Object.freeze(new Set<PrimaryKey>());
 
 export class IndexManager<TSchema extends AnyDocument> {
@@ -13,7 +17,9 @@ export class IndexManager<TSchema extends AnyDocument> {
   readonly unique: Map<StringKeyOf<TSchema>, UniqueIndex> = new Map<StringKeyOf<TSchema>, UniqueIndex>();
   readonly shared: Map<StringKeyOf<TSchema>, SharedIndex> = new Map<StringKeyOf<TSchema>, SharedIndex>();
 
-  constructor(readonly specs: IndexSpec<TSchema>[]) {
+  readonly specs: IndexSpec<TSchema>[];
+
+  constructor(specs: IndexSpec<TSchema>[]) {
     const primary = specs.find((spec) => spec.kind === "primary");
     if (primary === undefined) {
       throw new Error("Primary index is required");
@@ -31,6 +37,55 @@ export class IndexManager<TSchema extends AnyDocument> {
         }
       }
     }
+    this.specs = specs;
+  }
+
+  #isPrimaryIndex(key: string): boolean {
+    for (const { field, kind } of this.specs) {
+      if (key === field && kind === "primary") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #isUniqueIndex(key: string): boolean {
+    for (const { field, kind } of this.specs) {
+      if (key === field && kind === "unique") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #isSharedIndex(key: string): boolean {
+    for (const { field, kind } of this.specs) {
+      if (key === field && kind === "shared") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #getOptimalIndex(keys: string[]): string {
+    let best: string | undefined;
+
+    for (const key of keys) {
+      if (this.#isPrimaryIndex(key)) {
+        return key; // cannot beat primary
+      }
+
+      if (this.#isUniqueIndex(key)) {
+        best ??= key;
+        continue;
+      }
+
+      if (best === undefined && this.#isSharedIndex(key)) {
+        best = key;
+      }
+    }
+
+    return best ?? keys[0];
   }
 
   /**
@@ -48,12 +103,32 @@ export class IndexManager<TSchema extends AnyDocument> {
 
     try {
       for (const [field, index] of this.unique) {
-        index.insert(document[field], pk);
-        insertedUniques.push([field, document[field]]);
+        const value = document[field] as any;
+        if (value !== undefined) {
+          if (Array.isArray(value)) {
+            for (const innerValue of value) {
+              index.insert(innerValue, pk);
+              insertedUniques.push([field, innerValue]);
+            }
+          } else {
+            index.insert(value, pk);
+            insertedUniques.push([field, value]);
+          }
+        }
       }
       for (const [field, index] of this.shared) {
-        index.insert(document[field], pk);
-        insertedShared.push([field, document[field]]);
+        const value = document[field] as any;
+        if (value !== undefined) {
+          if (Array.isArray(value)) {
+            for (const innerValue of value) {
+              index.insert(innerValue, pk);
+              insertedShared.push([field, innerValue]);
+            }
+          } else {
+            index.insert(value, pk);
+            insertedShared.push([field, value]);
+          }
+        }
       }
       this.primary.insert(pk, document);
     } catch (err) {
@@ -67,67 +142,30 @@ export class IndexManager<TSchema extends AnyDocument> {
     }
   }
 
-  getByCondition(condition: Criteria<TSchema>): TSchema[] {
-    const indexedKeys = Array.from(
-      new Set([this.primary.key as StringKeyOf<TSchema>, ...this.unique.keys(), ...this.shared.keys()]),
-    );
+  getByCondition(condition: Criteria<TSchema> = {}): Cursor<TSchema> {
+    const indexes = resolveIndexesFromCondition(condition, this.specs);
 
-    const candidatePKs: PrimaryKey[] = [];
-
-    // ### Primary Keys
-    // Collect primary keys for indexed equality conditions
-
-    const pkSets: ReadonlySet<PrimaryKey>[] = [];
-
-    for (const key of indexedKeys) {
-      const value = (condition as any)[key];
-      if (value !== undefined) {
-        // Use index if available
-        const pks = this.getPrimaryKeysByIndex(key, value);
-        pkSets.push(pks);
-      }
+    if (indexes === undefined) {
+      return new Query(condition, {}).find<TSchema>(this.primary.documents);
     }
 
-    // ### Intersect
-    // Intersect all sets to find candidates
+    const index = this.#getOptimalIndex(Object.keys(indexes));
+    const value = indexes[index];
 
-    if (pkSets.length > 0) {
-      const sortedSets = pkSets.sort((a, b) => a.size - b.size);
-      const intersection = new Set(sortedSets[0]);
-      for (let i = 1; i < sortedSets.length; i++) {
-        for (const pk of intersection) {
-          if (!sortedSets[i].has(pk)) {
-            intersection.delete(pk);
-          }
-        }
+    if (Array.isArray(value)) {
+      const results: TSchema[] = [];
+      for (const innerValue of value) {
+        const records = this.getByIndex(index as any, innerValue);
+        results.push(...records);
       }
-      candidatePKs.push(...intersection);
-    } else {
-      candidatePKs.push(...this.primary.keys()); // no indexed fields → scan all primary keys
+      const unique = new Map<any, TSchema>();
+      for (const doc of results) {
+        unique.set(doc[this.primary.key], doc);
+      }
+      return new Query(condition, {}).find<TSchema>(Array.from(unique.values()));
     }
 
-    // ### Filter
-    // Filter candidates by remaining condition
-
-    const results: TSchema[] = [];
-    for (const pk of candidatePKs) {
-      const doc = this.primary.get(pk);
-      if (doc === undefined) {
-        continue;
-      }
-      let match = true;
-      for (const [field, expected] of Object.entries(condition)) {
-        if ((doc as any)[field] !== expected) {
-          match = false;
-          break;
-        }
-      }
-      if (match) {
-        results.push(doc);
-      }
-    }
-
-    return results;
+    return new Query(condition, {}).find<TSchema>(this.getByIndex(index as any, value));
   }
 
   /**
@@ -304,6 +342,55 @@ export class IndexManager<TSchema extends AnyDocument> {
     }
   }
 }
+
+/*
+ |--------------------------------------------------------------------------------
+ | Utils
+ |--------------------------------------------------------------------------------
+ */
+
+function resolveIndexesFromCondition<TSchema extends AnyDocument>(
+  condition: QueryCriteria<TSchema>,
+  indexes: IndexSpec<TSchema>[],
+): Record<StringKeyOf<TSchema>, any> | undefined {
+  const indexNames = indexes.map(({ field }) => field);
+
+  const index: any = {};
+
+  for (const key in condition) {
+    if (indexNames.includes(key as any) === true) {
+      let val: any;
+      if (isObject(condition[key]) === true) {
+        if ((condition as any)[key].$in !== undefined) {
+          val = (condition as any)[key].$in;
+        }
+      } else {
+        val = condition[key];
+      }
+      if (val !== undefined) {
+        index[key] = val;
+      }
+    }
+  }
+
+  if (Object.keys(index).length > 0) {
+    return index;
+  }
+}
+
+function isObject(v: any): v is object {
+  if (!v) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(v);
+  return (proto === OBJECT_PROTOTYPE || proto === null) && OBJECT_TAG === Object.prototype.toString.call(v);
+}
+
+/*
+ |--------------------------------------------------------------------------------
+ | Types
+ |--------------------------------------------------------------------------------
+ */
 
 export type IndexSpec<TSchema extends AnyDocument> = {
   field: StringKeyOf<TSchema>;

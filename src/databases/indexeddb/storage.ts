@@ -1,13 +1,12 @@
 import type { IDBPDatabase } from "idb";
-import { Query, update } from "mingo";
+import { update } from "mingo";
 import type { Criteria } from "mingo/types";
 import type { Modifier } from "mingo/updater";
 
-import type { IndexSpec } from "../../index/manager.ts";
+import { IndexManager, type IndexSpec } from "../../index/manager.ts";
 import { type DBLogger, InsertLog, QueryLog, RemoveLog, UpdateLog } from "../../logger.ts";
 import { addOptions, type QueryOptions, Storage, type UpdateResult } from "../../storage.ts";
-import type { AnyDocument } from "../../types.ts";
-import { IndexedDBCache } from "./cache.ts";
+import type { AnyDocument, StringKeyOf } from "../../types.ts";
 
 const OBJECT_PROTOTYPE = Object.getPrototypeOf({});
 const OBJECT_TAG = "[object Object]";
@@ -16,9 +15,9 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
   readonly pkey: string;
   readonly log: DBLogger;
 
-  readonly #cache = new IndexedDBCache<TSchema>();
+  readonly #index: IndexManager<TSchema>;
 
-  readonly #promise: Promise<IDBPDatabase>;
+  readonly #promise: Promise<void>;
 
   #db?: IDBPDatabase;
 
@@ -30,7 +29,16 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     }
     this.pkey = index.field;
     this.log = log ?? function log() {};
-    this.#promise = promise;
+    this.#index = new IndexManager(indexes);
+    this.#promise = this.#preload(promise);
+  }
+
+  async #preload(promise: Promise<IDBPDatabase>): Promise<void> {
+    this.#db = await promise;
+    const records = await this.#db.getAll(this.name);
+    for (const record of records) {
+      await this.#index.insert(record);
+    }
   }
 
   get db(): IDBPDatabase {
@@ -40,65 +48,13 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     return this.#db;
   }
 
+  get documents(): TSchema[] {
+    return this.#index.primary.documents;
+  }
+
   async resolve(): Promise<this> {
-    if (this.#db === undefined) {
-      this.#db = await this.#promise;
-    }
+    await this.#promise;
     return this;
-  }
-
-  /*
-   |--------------------------------------------------------------------------------
-   | Indexes
-   |--------------------------------------------------------------------------------
-   */
-
-  #isPrimaryIndex(key: string): boolean {
-    for (const { field, kind } of this.indexes) {
-      if (key === field && kind === "primary") {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  #isUniqueIndex(key: string): boolean {
-    for (const { field, kind } of this.indexes) {
-      if (key === field && kind === "unique") {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  #isSharedIndex(key: string): boolean {
-    for (const { field, kind } of this.indexes) {
-      if (key === field && kind === "shared") {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  #getOptimalIndex(keys: string[]): string {
-    let best: string | undefined;
-
-    for (const key of keys) {
-      if (this.#isPrimaryIndex(key)) {
-        return key; // cannot beat primary
-      }
-
-      if (this.#isUniqueIndex(key)) {
-        best ??= key;
-        continue;
-      }
-
-      if (best === undefined && this.#isSharedIndex(key)) {
-        best = key;
-      }
-    }
-
-    return best ?? keys[0];
   }
 
   /*
@@ -124,7 +80,9 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     await tx.done;
 
     this.broadcast("insert", documents);
-    this.#cache.flush();
+    for (const document of documents) {
+      this.#index.insert(document);
+    }
 
     this.log(logger.result());
   }
@@ -135,151 +93,23 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
    |--------------------------------------------------------------------------------
    */
 
-  async getByIndex(index: string, value: string): Promise<TSchema[]> {
-    return this.db.getAllFromIndex(this.name, index, value);
+  async getByIndex(field: StringKeyOf<TSchema>, value: string): Promise<TSchema[]> {
+    return this.#index.getByIndex(field, value);
   }
 
   async find(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
     const logger = new QueryLog(this.name, { condition, options });
 
-    const hashCode = this.#cache.hash(condition, options);
-    const cached = this.#cache.get(hashCode);
-    if (cached !== undefined) {
-      this.log(logger.result({ cached: true }));
-      return cached;
-    }
-
-    const indexes = this.#resolveIndexes(condition);
-
-    let cursor = new Query(condition).find<TSchema>(await this.#getAll({ ...options }, indexes));
+    const cursor = this.#index.getByCondition(condition);
     if (options !== undefined) {
-      cursor = addOptions(cursor, options);
+      addOptions(cursor, options);
     }
 
-    const documents = cursor.all();
-    this.#cache.set(hashCode, documents);
+    const documents = await cursor.all();
 
     this.log(logger.result());
 
     return documents;
-  }
-
-  /**
-   * TODO: Prototype! Needs to cover more mongodb query cases and investigation around
-   * nested indexing in indexeddb.
-   */
-  #resolveIndexes(filter: any): { [key: string]: any } | undefined {
-    const indexNames = this.db.transaction(this.name, "readonly").store.indexNames;
-    const index: { [key: string]: any } = {};
-    for (const key in filter) {
-      if (indexNames.contains(key) === true) {
-        let val: any;
-        if (isObject(filter[key]) === true) {
-          if ((filter as any)[key].$in !== undefined) {
-            val = (filter as any)[key].$in;
-          }
-        } else {
-          val = filter[key];
-        }
-        if (val !== undefined) {
-          index[key] = val;
-        }
-      }
-    }
-    if (Object.keys(index).length > 0) {
-      return index;
-    }
-  }
-
-  async #getAll(
-    { offset, range, limit }: QueryOptions,
-    indexes?: { [key: string]: IDBKeyRange | undefined },
-  ): Promise<TSchema[]> {
-    const tx = this.db.transaction(this.name, "readonly");
-
-    const store = tx.objectStore(this.name);
-
-    // ### Indexed
-    // Fetch all records by optimal index
-
-    if (indexes) {
-      const indexName = this.#getOptimalIndex(Object.keys(indexes));
-      const index = store.index(indexName);
-
-      const key = indexes[indexName];
-
-      const results: TSchema[] = [];
-
-      // Handle $in
-
-      if (Array.isArray(key)) {
-        for (const value of key) {
-          const records = await index.getAll(value);
-          results.push(...records);
-        }
-
-        // Deduplicate (required for $in)
-
-        const unique = new Map<any, TSchema>();
-        for (const doc of results) {
-          unique.set(this.pkey, doc); // adjust PK if needed
-        }
-
-        await tx.done;
-        return [...unique.values()];
-      }
-
-      // Single-key lookup
-
-      const records = await index.getAll(key);
-
-      await tx.done;
-      return records;
-    }
-
-    // ### Range
-    // Fetch records in a given range.
-
-    if (range) {
-      return store.getAll(IDBKeyRange.bound(range.from, range.to), limit);
-    }
-
-    // ### Offset
-    // Offset-based query (cursor-based)
-
-    if (offset) {
-      return this.#getAllByOffset(offset.value, offset.direction, limit);
-    }
-
-    // ### Default
-    // Fetch all records
-
-    return store.getAll(undefined, limit);
-  }
-
-  async #getAllByOffset(value: string, direction: 1 | -1, limit?: number) {
-    if (direction === 1) {
-      return this.db.getAll(this.name, IDBKeyRange.lowerBound(value), limit);
-    }
-    return this.#getAllByDescOffset(value, limit);
-  }
-
-  async #getAllByDescOffset(value: string, limit?: number) {
-    if (limit === undefined) {
-      return this.db.getAll(this.name, IDBKeyRange.upperBound(value));
-    }
-    const result = [];
-    let cursor = await this.db
-      .transaction(this.name, "readonly")
-      .store.openCursor(IDBKeyRange.upperBound(value), "prev");
-    for (let i = 0; i < limit; i++) {
-      if (cursor === null) {
-        break;
-      }
-      result.push(cursor.value);
-      cursor = await cursor.continue();
-    }
-    return result.reverse();
   }
 
   /*
@@ -320,7 +150,9 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     await tx.done;
 
     this.broadcast("update", documents);
-    this.#cache.flush();
+    for (const document of documents) {
+      this.#index.update(document);
+    }
 
     this.log(logger.result());
 
@@ -343,7 +175,9 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
     await tx.done;
 
     this.broadcast("remove", documents);
-    this.#cache.flush();
+    for (const document of documents) {
+      this.#index.remove(document);
+    }
 
     this.log(logger.result({ count: documents.length }));
 
@@ -371,6 +205,7 @@ export class IndexedDBStorage<TSchema extends AnyDocument = AnyDocument> extends
 
   async flush(): Promise<void> {
     await this.db.clear(this.name);
+    this.#index.flush();
   }
 }
 

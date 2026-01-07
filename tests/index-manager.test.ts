@@ -159,7 +159,7 @@ describe("IndexManager", { sanitizeOps: false, sanitizeResources: false }, () =>
       const user = { id: "u1", email: "a@example.com", group: "staff", name: "Alice", active: true };
       manager.insert(user);
 
-      const results = manager.getByCondition({ id: "u1" });
+      const results = manager.getByCondition({ id: "u1" }).all();
       expect(results).toHaveLength(1);
       expect(results[0]).toEqual(user);
     });
@@ -170,7 +170,7 @@ describe("IndexManager", { sanitizeOps: false, sanitizeResources: false }, () =>
       const user = { id: "u1", email: "a@example.com", group: "staff", name: "Alice", active: true };
       manager.insert(user);
 
-      const results = manager.getByCondition({ email: "a@example.com" });
+      const results = manager.getByCondition({ email: "a@example.com" }).all();
       expect(results).toHaveLength(1);
       expect(results[0]).toEqual(user);
     });
@@ -186,12 +186,12 @@ describe("IndexManager", { sanitizeOps: false, sanitizeResources: false }, () =>
       manager.insert(user2);
       manager.insert(user3);
 
-      const staff = manager.getByCondition({ group: "staff" });
+      const staff = manager.getByCondition({ group: "staff" }).all();
       expect(staff).toHaveLength(2);
       expect(staff).toContainEqual(user1);
       expect(staff).toContainEqual(user2);
 
-      const admin = manager.getByCondition({ group: "admin" });
+      const admin = manager.getByCondition({ group: "admin" }).all();
       expect(admin).toHaveLength(1);
       expect(admin[0]).toEqual(user3);
     });
@@ -201,11 +201,14 @@ describe("IndexManager", { sanitizeOps: false, sanitizeResources: false }, () =>
 
       const user1 = { id: "u1", email: "a@example.com", group: "staff", name: "Alice", active: true };
       const user2 = { id: "u2", email: "b@example.com", group: "staff", name: "Bob", active: false };
+
       manager.insert(user1);
       manager.insert(user2);
 
       // Lookup by shared + non-indexed field
-      const results = manager.getByCondition({ group: "staff", active: true });
+
+      const results = manager.getByCondition({ group: "staff", active: true }).all();
+
       expect(results).toHaveLength(1);
       expect(results[0]).toEqual(user1);
     });
@@ -216,10 +219,10 @@ describe("IndexManager", { sanitizeOps: false, sanitizeResources: false }, () =>
       const user = { id: "u1", email: "a@example.com", group: "staff", name: "Alice", active: true };
       manager.insert(user);
 
-      const results = manager.getByCondition({ group: "admin" });
+      const results = manager.getByCondition({ group: "admin" }).all();
       expect(results).toEqual([]);
 
-      const results2 = manager.getByCondition({ email: "nonexistent@example.com" });
+      const results2 = manager.getByCondition({ email: "nonexistent@example.com" }).all();
       expect(results2).toEqual([]);
     });
   });

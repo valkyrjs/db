@@ -3,9 +3,13 @@ import type { AnyDocument } from "../types.ts";
 export type PrimaryKey = string;
 
 export class PrimaryIndex<TSchema extends AnyDocument> {
+  readonly key: string;
+
   readonly #index = new Map<PrimaryKey, TSchema>();
 
-  constructor(readonly key: string) {}
+  constructor(key: string) {
+    this.key = key;
+  }
 
   get documents(): TSchema[] {
     return Array.from(this.#index.values());
@@ -21,7 +25,8 @@ export class PrimaryIndex<TSchema extends AnyDocument> {
 
   insert(pk: PrimaryKey, document: TSchema): void {
     if (this.#index.has(pk)) {
-      throw new Error(`Duplicate primary key: ${pk}`);
+      console.warn(`Duplicate primary key: ${pk}`);
+      return;
     }
     this.#index.set(pk, document);
   }

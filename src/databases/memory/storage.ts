@@ -35,7 +35,7 @@ export class MemoryStorage<TSchema extends AnyDocument = AnyDocument> extends St
   }
 
   async find(condition: Criteria<TSchema> = {}, options?: QueryOptions): Promise<TSchema[]> {
-    const cursor = new Query(condition).find<TSchema>(this.documents);
+    const cursor = this.index.getByCondition(condition);
     if (options !== undefined) {
       return addOptions(cursor, options).all();
     }
