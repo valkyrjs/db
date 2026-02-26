@@ -1,7 +1,7 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@biomejs/biome@2.3.10": "2.3.10",
+    "npm:@biomejs/biome@2.4.4": "2.4.4",
     "npm:@jsr/std__assert@1": "1.0.16",
     "npm:@jsr/std__async@1": "1.0.16",
     "npm:@jsr/std__testing@1": "1.0.16",
@@ -11,8 +11,8 @@
     "npm:expect@30.2.0": "30.2.0",
     "npm:fake-indexeddb@6.2.5": "6.2.5",
     "npm:idb@8.0.3": "8.0.3",
-    "npm:mingo@7.1.1": "7.1.1",
-    "npm:zod@4.3.4": "4.3.4"
+    "npm:mingo@7.2.0": "7.2.0",
+    "npm:zod@4.3.6": "4.3.6"
   },
   "npm": {
     "@babel/code-frame@7.27.1": {
@@ -26,8 +26,8 @@
     "@babel/helper-validator-identifier@7.28.5": {
       "integrity": "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="
     },
-    "@biomejs/biome@2.3.10": {
-      "integrity": "sha512-/uWSUd1MHX2fjqNLHNL6zLYWBbrJeG412/8H7ESuK8ewoRoMPUgHDebqKrPTx/5n6f17Xzqc9hdg3MEqA5hXnQ==",
+    "@biomejs/biome@2.4.4": {
+      "integrity": "sha512-tigwWS5KfJf0cABVd52NVaXyAVv4qpUXOWJ1rxFL8xF1RVoeS2q/LK+FHgYoKMclJCuRoCWAPy1IXaN9/mS61Q==",
       "optionalDependencies": [
         "@biomejs/cli-darwin-arm64",
         "@biomejs/cli-darwin-x64",
@@ -40,43 +40,43 @@
       ],
       "bin": true
     },
-    "@biomejs/cli-darwin-arm64@2.3.10": {
-      "integrity": "sha512-M6xUjtCVnNGFfK7HMNKa593nb7fwNm43fq1Mt71kpLpb+4mE7odO8W/oWVDyBVO4ackhresy1ZYO7OJcVo/B7w==",
+    "@biomejs/cli-darwin-arm64@2.4.4": {
+      "integrity": "sha512-jZ+Xc6qvD6tTH5jM6eKX44dcbyNqJHssfl2nnwT6vma6B1sj7ZLTGIk6N5QwVBs5xGN52r3trk5fgd3sQ9We9A==",
       "os": ["darwin"],
       "cpu": ["arm64"]
     },
-    "@biomejs/cli-darwin-x64@2.3.10": {
-      "integrity": "sha512-Vae7+V6t/Avr8tVbFNjnFSTKZogZHFYl7MMH62P/J1kZtr0tyRQ9Fe0onjqjS2Ek9lmNLmZc/VR5uSekh+p1fg==",
+    "@biomejs/cli-darwin-x64@2.4.4": {
+      "integrity": "sha512-Dh1a/+W+SUCXhEdL7TiX3ArPTFCQKJTI1mGncZNWfO+6suk+gYA4lNyJcBB+pwvF49uw0pEbUS49BgYOY4hzUg==",
       "os": ["darwin"],
       "cpu": ["x64"]
     },
-    "@biomejs/cli-linux-arm64-musl@2.3.10": {
-      "integrity": "sha512-B9DszIHkuKtOH2IFeeVkQmSMVUjss9KtHaNXquYYWCjH8IstNgXgx5B0aSBQNr6mn4RcKKRQZXn9Zu1rM3O0/A==",
+    "@biomejs/cli-linux-arm64-musl@2.4.4": {
+      "integrity": "sha512-+sPAXq3bxmFwhVFJnSwkSF5Rw2ZAJMH3MF6C9IveAEOdSpgajPhoQhbbAK12SehN9j2QrHpk4J/cHsa/HqWaYQ==",
       "os": ["linux"],
       "cpu": ["arm64"]
     },
-    "@biomejs/cli-linux-arm64@2.3.10": {
-      "integrity": "sha512-hhPw2V3/EpHKsileVOFynuWiKRgFEV48cLe0eA+G2wO4SzlwEhLEB9LhlSrVeu2mtSn205W283LkX7Fh48CaxA==",
+    "@biomejs/cli-linux-arm64@2.4.4": {
+      "integrity": "sha512-V/NFfbWhsUU6w+m5WYbBenlEAz8eYnSqRMDMAW3K+3v0tYVkNyZn8VU0XPxk/lOqNXLSCCrV7FmV/u3SjCBShg==",
       "os": ["linux"],
       "cpu": ["arm64"]
     },
-    "@biomejs/cli-linux-x64-musl@2.3.10": {
-      "integrity": "sha512-QTfHZQh62SDFdYc2nfmZFuTm5yYb4eO1zwfB+90YxUumRCR171tS1GoTX5OD0wrv4UsziMPmrePMtkTnNyYG3g==",
+    "@biomejs/cli-linux-x64-musl@2.4.4": {
+      "integrity": "sha512-gGvFTGpOIQDb5CQ2VC0n9Z2UEqlP46c4aNgHmAMytYieTGEcfqhfCFnhs6xjt0S3igE6q5GLuIXtdQt3Izok+g==",
       "os": ["linux"],
       "cpu": ["x64"]
     },
-    "@biomejs/cli-linux-x64@2.3.10": {
-      "integrity": "sha512-wwAkWD1MR95u+J4LkWP74/vGz+tRrIQvr8kfMMJY8KOQ8+HMVleREOcPYsQX82S7uueco60L58Wc6M1I9WA9Dw==",
+    "@biomejs/cli-linux-x64@2.4.4": {
+      "integrity": "sha512-R4+ZCDtG9kHArasyBO+UBD6jr/FcFCTH8QkNTOCu0pRJzCWyWC4EtZa2AmUZB5h3e0jD7bRV2KvrENcf8rndBg==",
       "os": ["linux"],
       "cpu": ["x64"]
     },
-    "@biomejs/cli-win32-arm64@2.3.10": {
-      "integrity": "sha512-o7lYc9n+CfRbHvkjPhm8s9FgbKdYZu5HCcGVMItLjz93EhgJ8AM44W+QckDqLA9MKDNFrR8nPbO4b73VC5kGGQ==",
+    "@biomejs/cli-win32-arm64@2.4.4": {
+      "integrity": "sha512-trzCqM7x+Gn832zZHgr28JoYagQNX4CZkUZhMUac2YxvvyDRLJDrb5m9IA7CaZLlX6lTQmADVfLEKP1et1Ma4Q==",
       "os": ["win32"],
       "cpu": ["arm64"]
     },
-    "@biomejs/cli-win32-x64@2.3.10": {
-      "integrity": "sha512-pHEFgq7dUEsKnqG9mx9bXihxGI49X+ar+UBrEIj3Wqj3UCZp1rNgV+OoyjFgcXsjCWpuEAF4VJdkZr3TrWdCbQ==",
+    "@biomejs/cli-win32-x64@2.4.4": {
+      "integrity": "sha512-gnOHKVPFAAPrpoPt2t+Q6FZ7RPry/FDV3GcpU53P3PtLNnQjBmKyN2Vh/JtqXet+H4pme8CC76rScwdjDcT1/A==",
       "os": ["win32"],
       "cpu": ["x64"]
     },
@@ -381,8 +381,8 @@
         "picomatch@2.3.1"
       ]
     },
-    "mingo@7.1.1": {
-      "integrity": "sha512-YfcRcZ4TRzRw1G3tf8Nu04fIoFr8hVYdTDktXU2ZLXnfn51E8yeUDixOGGQYQLduMjfznsCmEuBwzncw9lGxwA=="
+    "mingo@7.2.0": {
+      "integrity": "sha512-UeX942qZpofn5L97h295SkS7j/ADf7Qac8gdRCMBPxi0/1m70aeB2owLFvWbyuMj1dowonlivlVRQVDx+6h+7Q=="
     },
     "mongodb-connection-string-url@3.0.2": {
       "integrity": "sha512-rMO7CGo/9BFwyZABcKAWL8UJwH/Kc2x0g72uhDWzG48URRax5TCIcJ7Rc3RZqffZzO/Gwff/jyKwCU9TN8gehA==",
@@ -471,14 +471,14 @@
         "webidl-conversions"
       ]
     },
-    "zod@4.3.4": {
-      "integrity": "sha512-Zw/uYiiyF6pUT1qmKbZziChgNPRu+ZRneAsMUDU6IwmXdWt5JwcUfy2bvLOCUtz5UniaN/Zx5aFttZYbYc7O/A=="
+    "zod@4.3.6": {
+      "integrity": "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="
     }
   },
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@biomejs/biome@2.3.10",
+        "npm:@biomejs/biome@2.4.4",
         "npm:@jsr/std__assert@1",
         "npm:@jsr/std__async@1",
         "npm:@jsr/std__testing@1",
@@ -487,8 +487,8 @@
         "npm:expect@30.2.0",
         "npm:fake-indexeddb@6.2.5",
         "npm:idb@8.0.3",
-        "npm:mingo@7.1.1",
-        "npm:zod@4.3.4"
+        "npm:mingo@7.2.0",
+        "npm:zod@4.3.6"
       ]
     }
   }
